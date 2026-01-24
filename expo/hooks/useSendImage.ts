@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import * as ImagePicker from "expo-image-picker";
 
 import { useWebSocket } from "@/components/context/WebSocketContext";
@@ -8,7 +8,7 @@ import {
   encryptAndPrepareMessageForSending,
   encryptImageFile,
   createImageMessagePayload,
-  readImageAsBytes,
+  // readImageAsBytes,
   base64ToUint8Array,
 } from "@/services/encryptionService";
 import { ImageMessageContent, RecipientDevicePublicKey } from "@/types/types";
@@ -33,6 +33,7 @@ export const useSendImage = (): UseSendImageReturn => {
   const [isSendingImage, setIsSendingImage] = useState(false);
   const [imageSendError, setImageSendError] = useState<string | null>(null);
   const { addOptimisticDisplayable } = useMessageStore();
+  const clientSequenceRef = useRef(0);
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
@@ -45,7 +46,8 @@ export const useSendImage = (): UseSendImageReturn => {
     ): Promise<void> => {
       setIsSendingImage(true);
       setImageSendError(null);
-      let normalizedImageUri: string | undefined;
+      // Keep for potential future use; avoid unused var warnings
+      // let normalizedImageUri: string | undefined;
 
       if (!currentUser) {
         const errorMsg = "User not authenticated. Cannot send image.";
@@ -56,7 +58,7 @@ export const useSendImage = (): UseSendImageReturn => {
 
       try {
         const processedData = await processImage(imageAsset.uri);
-        normalizedImageUri = processedData.normalized.uri;
+        // normalizedImageUri = processedData.normalized.uri;
 
         const { normalized, blurhash } = processedData;
 
@@ -83,6 +85,7 @@ export const useSendImage = (): UseSendImageReturn => {
           content: placeholderContent,
           align: "right",
           timestamp,
+          clientSeq: ++clientSequenceRef.current,
         };
         addOptimisticDisplayable(optimisticItem);
 

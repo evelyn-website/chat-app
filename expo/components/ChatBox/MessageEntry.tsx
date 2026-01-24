@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Pressable,
   View,
@@ -27,6 +27,9 @@ const MessageEntry = ({
   const { sendImage, isSendingImage, imageSendError } = useSendImage();
 
   const [textContent, setTextContent] = useState<string>("");
+  const textInputRef = useRef<TextInput>(null);
+  const isBusy = isSending || isSendingImage;
+  const sendChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const handleSubmitText = async () => {
     const trimmedContent = textContent.trim();
@@ -37,12 +40,21 @@ const MessageEntry = ({
       return;
     }
 
-    try {
-      await sendMessage(trimmedContent, group.id, recipientUserIds);
-      setTextContent("");
-    } catch (error) {
-      console.error("MessageEntry: Error sending text message:", error);
-    }
+    const contentToSend = trimmedContent;
+    setTextContent("");
+
+    // Chain sends to preserve order without blocking the UI
+    sendChainRef.current = sendChainRef.current
+      .then(async () => {
+        try {
+          await sendMessage(contentToSend, group.id, recipientUserIds);
+        } catch (error) {
+          console.error("MessageEntry: Error sending text message:", error);
+        }
+      })
+      .catch(() => {
+        // Swallow to keep the chain alive
+      });
   };
 
   const handleAttachImage = async () => {
@@ -73,11 +85,49 @@ const MessageEntry = ({
     }
   };
 
-  const isBusy = isSending || isSendingImage;
+  // DEV ONLY: Send burst of messages for testing
+  const handleSendBurst = async () => {
+    if (!user) return;
+    const count = 20;
+    const startTime = Date.now();
+    console.log(`🚀 [BURST] Starting burst of ${count} messages`);
+
+    // Fire all messages in parallel (bypasses the send chain)
+    const promises = [];
+    for (let i = 1; i <= count; i++) {
+      const messageNum = i;
+
+      const promise = sendMessage(`Test message ${messageNum}`, group.id, recipientUserIds)
+        .catch((error) => {
+          console.error(`❌ [BURST] Error sending message ${messageNum}:`, error);
+        });
+
+      promises.push(promise);
+
+      // Small stagger to prevent exact simultaneous sends
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Wait for all to complete
+    await Promise.all(promises);
+    const totalTime = Date.now() - startTime;
+    console.log(`✅ [BURST] Completed ${count} messages in ${totalTime}ms`);
+  };
 
   return (
     <View>
       <View className="flex-row items-center px-3 py-2">
+        {/* DEV ONLY: Burst test button */}
+        {__DEV__ && (
+          <Pressable
+            onPress={handleSendBurst}
+            disabled={isBusy}
+            className="p-2 mr-1"
+          >
+            <Text className="text-xs text-blue-400 font-bold">BURST</Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={handleAttachImage}
           disabled={isBusy}
@@ -96,6 +146,7 @@ const MessageEntry = ({
 
         <View className="flex-1 flex-row items-center bg-gray-800 rounded-full border border-gray-700 px-4">
           <TextInput
+            ref={textInputRef}
             autoCorrect
             spellCheck
             keyboardType="default"
@@ -108,11 +159,10 @@ const MessageEntry = ({
             blurOnSubmit={false}
             returnKeyType="send"
             onSubmitEditing={handleSubmitText}
-            editable={!isBusy}
           />
           <Pressable
             onPress={handleSubmitText}
-            disabled={!textContent.trim() || isBusy}
+            disabled={!textContent.trim()}
             className="ml-2"
           >
             {isSending ? (

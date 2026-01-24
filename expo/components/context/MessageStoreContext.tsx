@@ -15,6 +15,7 @@ import { useGlobalStore } from "./GlobalStoreContext";
 import { CanceledError } from "axios";
 import * as encryptionService from "@/services/encryptionService";
 import { DisplayableItem } from "../ChatBox/types";
+import { DEBUG } from "@/utils/debug";
 
 type MessageAction =
   | { type: "ADD_MESSAGE"; payload: DbMessage }
@@ -36,6 +37,7 @@ interface MessageStoreContextType {
   optimistic: Record<string, DisplayableItem[]>;
   addOptimisticDisplayable: (item: DisplayableItem) => void;
   removeOptimisticDisplayable: (groupId: string, id: string) => void;
+  getClientSeqForMessageId: (id: string) => number | undefined;
 }
 
 const initialState: MessageState = {
@@ -109,16 +111,33 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const [optimistic, setOptimistic] = useState<
     Record<string, DisplayableItem[]>
   >({});
+  const clientSeqByIdRef = useRef<Map<string, number>>(new Map());
 
   const hasLoadedHistoricalMessagesRef = useRef(false);
 
-  const addOptimisticDisplayable = useCallback((item: DisplayableItem) => {
-    setOptimistic((o) => {
-      const list = o[item.groupId] || [];
-      const newState = { ...o, [item.groupId]: [...list, item] };
-      return newState;
-    });
-  }, []);
+  const addOptimisticDisplayable = useCallback(
+    (item: DisplayableItem) => {
+      setOptimistic((o) => {
+        const list = o[item.groupId] || [];
+        const newState = { ...o, [item.groupId]: [...list, item] };
+
+        if (DEBUG.MESSAGE_FLOW) {
+          console.log('[MSG] Optimistic created', {
+            id: item.id.slice(0, 8),
+            seq: (item as any).clientSeq,
+            time: new Date(item.timestamp).toISOString().slice(11, 23),
+          });
+        }
+
+        const seq = (item as any).clientSeq;
+        if (typeof seq === "number") {
+          clientSeqByIdRef.current.set(item.id, seq);
+        }
+        return newState;
+      });
+    },
+    []
+  );
 
   const removeOptimisticDisplayable = useCallback(
     (groupId: string, id: string) => {
@@ -127,6 +146,9 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           ...o,
           [groupId]: (o[groupId] || []).filter((x) => x.id !== id),
         };
+        // if (DEBUG_STORE) {
+        //   console.log("[Store] optimistic remove", { groupId, id });
+        // }
         return newState;
       });
     },
@@ -172,12 +194,10 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           );
           if (processed) {
             processedMessages.push(processed);
-            removeOptimisticDisplayable(rawMsg.group_id, rawMsg.id);
-          } else {
-            console.warn(
-              `Failed to process historical raw message with ID: ${rawMsg.id}`
-            );
+            // Note: Optimistic messages will be filtered out by ChatBox automatically
           }
+          // Note: processAndDecodeIncomingMessage returns null for messages without
+          // an envelope for this device - this is expected for historical messages
         }
 
         // Only clear messages on the first historical load to prevent flash
@@ -253,22 +273,24 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         );
 
       if (processedMessage) {
+        if (DEBUG.MESSAGE_FLOW) {
+          console.log('[MSG] Server confirmed', {
+            id: processedMessage.id.slice(0, 8),
+            time: new Date(processedMessage.timestamp).toISOString().slice(11, 23),
+          });
+        }
+
         dispatch({ type: "ADD_MESSAGE", payload: processedMessage });
         await store.saveMessages([processedMessage]);
 
         refreshGroups();
 
-        setTimeout(() => {
-          removeOptimisticDisplayable(
-            processedMessage.group_id,
-            processedMessage.id
-          );
-        }, 0);
-      } else {
-        console.warn(
-          `Failed to process incoming live raw message with ID: ${rawMsg.id}`
-        );
+        // Note: Optimistic messages are automatically filtered out by ChatBox
+        // when their real counterparts are decrypted and ready to display.
+        // No need for a timer-based removal.
       }
+      // Note: processAndDecodeIncomingMessage returns null for messages without
+      // an envelope for this device - this is expected and not an error
     };
 
     onMessage(handleNewRawMessage);
@@ -289,6 +311,10 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     [state.messages]
   );
 
+  const getClientSeqForMessageId = useCallback((id: string) => {
+    return clientSeqByIdRef.current.get(id);
+  }, []);
+
   const value = useMemo(
     () => ({
       getMessagesForGroup,
@@ -298,6 +324,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
+      getClientSeqForMessageId,
     }),
     [
       getMessagesForGroup,
@@ -307,6 +334,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
+      getClientSeqForMessageId,
     ]
   );
 

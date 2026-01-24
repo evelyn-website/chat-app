@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useWebSocket } from "../components/context/WebSocketContext";
 import { useGlobalStore } from "../components/context/GlobalStoreContext";
 import * as encryptionService from "@/services/encryptionService";
@@ -23,6 +23,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
   const { addOptimisticDisplayable } = useMessageStore();
+  const clientSequenceRef = useRef(0);
 
   const sendMessage = useCallback(
     async (
@@ -52,6 +53,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
         content: plaintext,
         align: "right",
         timestamp,
+        clientSeq: ++clientSequenceRef.current,
       };
       addOptimisticDisplayable(optimisticItem);
 
@@ -101,7 +103,6 @@ export const useSendMessage = (): UseSendMessageReturn => {
         if (!rawMessagePayload) {
           throw new Error("Failed to encrypt the message payload.");
         }
-        console.log({ rawMessagePayload });
         sendPacketOverSocket(rawMessagePayload);
       } catch (error: any) {
         console.error("Error in sendMessage process:", error);

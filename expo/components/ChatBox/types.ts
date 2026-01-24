@@ -8,6 +8,7 @@ export type TextDisplayableItem = {
   content: string; // Plaintext
   align: "left" | "right";
   timestamp: string;
+  clientSeq?: number;
 };
 
 export type ImageDisplayableItem = {
@@ -18,6 +19,7 @@ export type ImageDisplayableItem = {
   content: ImageMessageContent;
   align: "left" | "right";
   timestamp: string;
+  clientSeq?: number;
 };
 
 export type DateSeparatorItem = {
