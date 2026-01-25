@@ -34,6 +34,8 @@ export type DateSeparatorItem = {
   timestamp: string;
 };
 
+export type OptimisticMessageItem = TextDisplayableItem | ImageDisplayableItem;
+
 export type DisplayableItem =
   | TextDisplayableItem
   | ImageDisplayableItem

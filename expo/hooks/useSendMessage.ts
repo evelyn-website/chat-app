@@ -5,7 +5,7 @@ import * as encryptionService from "@/services/encryptionService";
 import { RecipientDevicePublicKey } from "@/types/types";
 import { v4 } from "uuid";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
-import { DisplayableItem } from "@/components/ChatBox/types";
+import { OptimisticMessageItem } from "@/components/ChatBox/types";
 interface UseSendMessageReturn {
   sendMessage: (
     plaintext: string,
@@ -45,7 +45,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
       const timestamp = new Date().toISOString();
       const clientSeq = getNextClientSeq();
 
-      const optimisticItem: DisplayableItem = {
+      const optimisticItem: OptimisticMessageItem = {
         type: "message_text",
         id,
         groupId: group_id,

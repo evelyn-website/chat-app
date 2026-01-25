@@ -14,7 +14,7 @@ import http from "@/util/custom-axios";
 import { useGlobalStore } from "./GlobalStoreContext";
 import { CanceledError } from "axios";
 import * as encryptionService from "@/services/encryptionService";
-import { DisplayableItem } from "../ChatBox/types";
+import { OptimisticMessageItem } from "../ChatBox/types";
 import { DEBUG } from "@/utils/debug";
 
 type MessageAction =
@@ -34,8 +34,8 @@ interface MessageStoreContextType {
   loading: boolean;
   error: string | null;
   loadHistoricalMessages: (deviceId?: string) => Promise<void>;
-  optimistic: Record<string, DisplayableItem[]>;
-  addOptimisticDisplayable: (item: DisplayableItem) => void;
+  optimistic: Record<string, OptimisticMessageItem[]>;
+  addOptimisticDisplayable: (item: OptimisticMessageItem) => void;
   removeOptimisticDisplayable: (groupId: string, id: string) => void;
   getNextClientSeq: () => number;
 }
@@ -109,19 +109,19 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const { store, deviceId: globalDeviceId, refreshGroups } = useGlobalStore();
 
   const [optimistic, setOptimistic] = useState<
-    Record<string, DisplayableItem[]>
+    Record<string, OptimisticMessageItem[]>
   >({});
 
   const globalClientSequenceRef = useRef(0);
   const hasLoadedHistoricalMessagesRef = useRef(false);
-  const optimisticRef = useRef<Record<string, DisplayableItem[]>>({});
+  const optimisticRef = useRef<Record<string, OptimisticMessageItem[]>>({});
 
   const getNextClientSeq = useCallback(() => {
     return ++globalClientSequenceRef.current;
   }, []);
 
   const addOptimisticDisplayable = useCallback(
-    (item: DisplayableItem) => {
+    (item: OptimisticMessageItem) => {
       setOptimistic((o) => {
         const list = o[item.groupId] || [];
         const newState = { ...o, [item.groupId]: [...list, item] };
@@ -129,7 +129,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         if (DEBUG.MESSAGE_FLOW) {
           console.log('[MSG] Optimistic created', {
             id: item.id.slice(0, 8),
-            seq: (item as any).clientSeq,
+            seq: item.clientSeq,
             time: new Date(item.timestamp).toISOString().slice(11, 23),
           });
         }
@@ -291,7 +291,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       if (baseProcessed) {
         const processedMessage: DbMessage = {
           ...baseProcessed,
-          client_seq: (optimisticMsg && 'clientSeq' in optimisticMsg) ? (optimisticMsg.clientSeq ?? null) : null,
+          client_seq: optimisticMsg?.clientSeq ?? null,
           client_timestamp: optimisticMsg?.timestamp ?? null,
         };
 

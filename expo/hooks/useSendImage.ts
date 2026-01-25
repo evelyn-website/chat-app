@@ -16,7 +16,7 @@ import {
 import { ImageMessageContent, RecipientDevicePublicKey } from "@/types/types";
 import { processImage } from "@/services/imageService";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
-import { DisplayableItem } from "@/components/ChatBox/types";
+import { OptimisticMessageItem } from "@/components/ChatBox/types";
 import { v4 } from "uuid";
 
 interface UseSendImageReturn {
@@ -79,7 +79,7 @@ export const useSendImage = (): UseSendImageReturn => {
           localUri: localUri,
         };
 
-        const optimisticItem: DisplayableItem = {
+        const optimisticItem: OptimisticMessageItem = {
           type: "message_image",
           id,
           groupId: groupId,
