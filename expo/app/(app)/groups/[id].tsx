@@ -72,6 +72,22 @@ const GroupPage = () => {
     }
   }, [currentGroup, id, store, refreshGroups]);
 
+  // Mark as read when leaving the group (component unmount or group change)
+  useEffect(() => {
+    return () => {
+      if (id && store) {
+        store
+          .markGroupRead(id)
+          .then(() => {
+            refreshGroups();
+          })
+          .catch((error) => {
+            console.error("Error marking group as read on unmount:", error);
+          });
+      }
+    };
+  }, [id, store, refreshGroups]);
+
   useEffect(() => {
     if (!isLoading && currentGroup === null) {
       if (router.canGoBack()) {
