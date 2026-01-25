@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { renderHook, act } from '@testing-library/react-native';
 import { GlobalStoreProvider, useGlobalStore } from './GlobalStoreContext';
 import { Store } from '@/store/Store';
 import http from '@/util/custom-axios';
@@ -61,12 +61,7 @@ describe('GlobalStoreContext', () => {
       expect(mockStore.close).toHaveBeenCalled();
     });
 
-    it('should render children', () => {
-      const TestComponent = () => {
-        const { user } = useGlobalStore();
-        return null;
-      };
-
+    it('should provide context to children', () => {
       const { result } = renderHook(() => useGlobalStore(), { wrapper });
 
       expect(result.current).toBeDefined();
@@ -429,6 +424,7 @@ describe('GlobalStoreContext', () => {
     it('should handle canceled requests gracefully', async () => {
       const { result } = renderHook(() => useGlobalStore(), { wrapper });
 
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { CanceledError } = require('axios');
       (http.get as jest.Mock).mockRejectedValueOnce(new CanceledError());
 
@@ -440,10 +436,8 @@ describe('GlobalStoreContext', () => {
         await result.current.loadRelevantDeviceKeys();
       });
 
-      // CanceledError doesn't set error state, but loading is still reset to false
-      // Since the catch block doesn't dispatch ERROR action for CanceledError
-      // The loading state remains true until a success or real error occurs
-      // This test documents current behavior
+      // CanceledError resets loading state without setting error
+      expect(result.current.deviceKeysLoading).toBe(false);
       expect(result.current.deviceKeysError).toBeNull();
     });
   });

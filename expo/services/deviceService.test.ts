@@ -107,7 +107,7 @@ describe('deviceService', () => {
         new Error('Save error')
       );
 
-      // Should not throw even if save fails, still return the generated ID
+      // Save errors propagate to caller
       await expect(
         getOrGenerateDeviceIdentifier()
       ).rejects.toThrow('Save error');
