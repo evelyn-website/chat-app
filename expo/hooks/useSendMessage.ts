@@ -22,7 +22,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
-  const { addOptimisticDisplayable, getNextClientSeq } = useMessageStore();
+  const { addOptimisticDisplayable, removeOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const sendMessage = useCallback(
     async (
@@ -107,6 +107,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
         sendPacketOverSocket(rawMessagePayload);
       } catch (error: any) {
         console.error("Error in sendMessage process:", error);
+        removeOptimisticDisplayable(group_id, id);
         setSendError(
           error.message || "An unexpected error occurred while sending."
         );
@@ -119,6 +120,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      removeOptimisticDisplayable,
       getNextClientSeq,
     ]
   );

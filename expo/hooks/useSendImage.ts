@@ -34,7 +34,7 @@ const baseURL = `${process.env.EXPO_PUBLIC_HOST}/images`;
 export const useSendImage = (): UseSendImageReturn => {
   const [isSendingImage, setIsSendingImage] = useState(false);
   const [imageSendError, setImageSendError] = useState<string | null>(null);
-  const { addOptimisticDisplayable, getNextClientSeq } = useMessageStore();
+  const { addOptimisticDisplayable, removeOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
@@ -57,13 +57,14 @@ export const useSendImage = (): UseSendImageReturn => {
         return;
       }
 
+      const id = v4();
+
       try {
         const processedData = await processImage(imageAsset.uri);
         // normalizedImageUri = processedData.normalized.uri;
 
         const { normalized, blurhash } = processedData;
 
-        const id = v4();
         const timestamp = new Date().toISOString();
         const clientSeq = getNextClientSeq();
 
@@ -188,6 +189,7 @@ export const useSendImage = (): UseSendImageReturn => {
         sendPacketOverSocket(rawMessagePayload);
       } catch (error: any) {
         console.error("Error in sendImage process:", error);
+        removeOptimisticDisplayable(groupId, id);
         setImageSendError(
           error.message || "An unexpected error occurred while sending image."
         );
@@ -200,6 +202,7 @@ export const useSendImage = (): UseSendImageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      removeOptimisticDisplayable,
       getNextClientSeq,
     ]
   );

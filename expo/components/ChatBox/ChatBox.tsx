@@ -340,6 +340,8 @@ export default function ChatBox({ group }: { group: Group }) {
         if (aTime !== bTime) return aTime - bTime;
 
         // 2. Secondary: clientSeq for same-timestamp messages
+        // Note: clientSeq (camelCase) = in-memory optimistic messages
+        //       client_seq (snake_case) = persisted messages from DB
         const aSeq = isMessage(a) ? (a.clientSeq ?? a.client_seq ?? null) : null;
         const bSeq = isMessage(b) ? (b.clientSeq ?? b.client_seq ?? null) : null;
 
