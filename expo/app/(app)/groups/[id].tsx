@@ -3,7 +3,7 @@ import ChatBox from "@/components/ChatBox/ChatBox";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import { Group } from "@/types/types";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { validate } from "uuid";
 
@@ -13,6 +13,7 @@ const GroupPage = () => {
 
   const [allGroups, setAllGroups] = useState<Group[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const markedAsReadRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!store || !id) {
@@ -56,9 +57,10 @@ const GroupPage = () => {
     return allGroups.find((g) => g.id.toString() === id) || null;
   }, [id, allGroups]);
 
-  // Mark group as read when it's successfully loaded
+  // Mark group as read when it's successfully loaded (only once per group)
   useEffect(() => {
-    if (currentGroup && id && store) {
+    if (currentGroup && id && store && markedAsReadRef.current !== id) {
+      markedAsReadRef.current = id;
       store
         .markGroupRead(id)
         .then(() => {

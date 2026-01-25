@@ -114,6 +114,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const globalClientSequenceRef = useRef(0);
   const hasLoadedHistoricalMessagesRef = useRef(false);
+  const optimisticRef = useRef<Record<string, DisplayableItem[]>>({});
 
   const getNextClientSeq = useCallback(() => {
     return ++globalClientSequenceRef.current;
@@ -154,6 +155,11 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     []
   );
+
+  // Keep optimisticRef in sync with optimistic state to avoid circular dependency
+  useEffect(() => {
+    optimisticRef.current = optimistic;
+  }, [optimistic]);
 
   const isSyncingHistoricalMessagesRef = useRef(false);
 
@@ -269,7 +275,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Find optimistic message to extract client metadata
-      const optimisticMsg = optimistic[rawMsg.group_id]?.find(
+      const optimisticMsg = optimisticRef.current[rawMsg.group_id]?.find(
         (m) => m.id === rawMsg.id
       );
 
@@ -318,7 +324,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     store,
     globalDeviceId,
     refreshGroups,
-    optimistic,
   ]);
 
   const getMessagesForGroup = useCallback(
