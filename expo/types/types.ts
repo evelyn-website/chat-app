@@ -99,7 +99,11 @@ export interface DbMessage {
  * All binary data is Base64 encoded for JSON serialization.
  */
 
-export type MessageType = "text" | "image" | "control";
+export enum MessageType {
+  TEXT = "text",
+  IMAGE = "image",
+  CONTROL = "control",
+}
 
 export type RawMessage = {
   id: string;

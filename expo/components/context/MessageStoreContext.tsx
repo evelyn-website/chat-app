@@ -40,13 +40,13 @@ interface MessageStoreContextType {
   getNextClientSeq: () => number;
 }
 
-const initialState: MessageState = {
+export const initialState: MessageState = {
   messages: {},
   loading: false,
   error: null,
 };
 
-const messageReducer = (
+export const messageReducer = (
   state: MessageState,
   action: MessageAction
 ): MessageState => {

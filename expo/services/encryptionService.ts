@@ -7,13 +7,12 @@ import {
 import sodium from "react-native-libsodium";
 import { Base64 } from "js-base64";
 import * as FileSystem from "expo-file-system";
-import { v4 as uuidv4 } from "uuid";
 
 // --- Concurrency Control ---
 class ConcurrencyLimiter {
   private activeOperations = 0;
   private maxConcurrent: number;
-  private queue: Array<() => void> = [];
+  private queue: (() => void)[] = [];
   private sodiumReadyPromise: Promise<void>;
 
   constructor(maxConcurrent: number = 3) {

@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useWebSocket } from "../components/context/WebSocketContext";
 import { useGlobalStore } from "../components/context/GlobalStoreContext";
 import * as encryptionService from "@/services/encryptionService";
-import { RecipientDevicePublicKey } from "@/types/types";
+import { MessageType, RecipientDevicePublicKey } from "@/types/types";
 import { v4 } from "uuid";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
 import { OptimisticMessageItem } from "@/components/ChatBox/types";
@@ -98,7 +98,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
             plaintext,
             group_id,
             recipientDevicePublicKeys,
-            "text"
+            MessageType.TEXT
           );
 
         if (!rawMessagePayload) {
