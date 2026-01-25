@@ -5,7 +5,7 @@ import * as encryptionService from "@/services/encryptionService";
 import { RecipientDevicePublicKey } from "@/types/types";
 import { v4 } from "uuid";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
-import { DisplayableItem } from "@/components/ChatBox/types";
+import { OptimisticMessageItem } from "@/components/ChatBox/types";
 interface UseSendMessageReturn {
   sendMessage: (
     plaintext: string,
@@ -22,7 +22,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
-  const { addOptimisticDisplayable } = useMessageStore();
+  const { addOptimisticDisplayable, removeOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const sendMessage = useCallback(
     async (
@@ -43,8 +43,9 @@ export const useSendMessage = (): UseSendMessageReturn => {
 
       const id = v4();
       const timestamp = new Date().toISOString();
+      const clientSeq = getNextClientSeq();
 
-      const optimisticItem: DisplayableItem = {
+      const optimisticItem: OptimisticMessageItem = {
         type: "message_text",
         id,
         groupId: group_id,
@@ -52,6 +53,8 @@ export const useSendMessage = (): UseSendMessageReturn => {
         content: plaintext,
         align: "right",
         timestamp,
+        clientSeq,
+        client_timestamp: timestamp,
       };
       addOptimisticDisplayable(optimisticItem);
 
@@ -101,10 +104,10 @@ export const useSendMessage = (): UseSendMessageReturn => {
         if (!rawMessagePayload) {
           throw new Error("Failed to encrypt the message payload.");
         }
-        console.log({ rawMessagePayload });
         sendPacketOverSocket(rawMessagePayload);
       } catch (error: any) {
         console.error("Error in sendMessage process:", error);
+        removeOptimisticDisplayable(group_id, id);
         setSendError(
           error.message || "An unexpected error occurred while sending."
         );
@@ -117,6 +120,8 @@ export const useSendMessage = (): UseSendMessageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      removeOptimisticDisplayable,
+      getNextClientSeq,
     ]
   );
 

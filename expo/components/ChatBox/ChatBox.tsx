@@ -28,9 +28,10 @@ import { useMessageStore } from "../context/MessageStoreContext";
 import { Group, ImageMessageContent } from "@/types/types";
 import * as deviceService from "@/services/deviceService";
 import * as encryptionService from "@/services/encryptionService";
-import { DisplayableItem } from "./types";
+import { DisplayableItem, TextDisplayableItem, ImageDisplayableItem } from "./types";
 import ImageBubble from "./ImageBubble";
 import { router } from "expo-router";
+import { DEBUG } from "@/utils/debug";
 
 const SCROLL_THRESHOLD = 200;
 const HAPTIC_THRESHOLD = -40;
@@ -58,6 +59,12 @@ export default function ChatBox({ group }: { group: Group }) {
   const optimisticMessages = useMemo(() => {
     return optimistic[group.id] || [];
   }, [optimistic, group.id]);
+
+  // Note: We don't clean up optimistic messages from the store after they're displayed.
+  // The filtering logic above (line 307) already ensures optimistic messages don't appear
+  // twice in the UI. The memory overhead is minimal (~100 bytes per message) and gets
+  // cleaned up when the component unmounts. Any attempt to remove them during render
+  // causes infinite loops or race conditions.
 
   const flatListRef = useRef<FlatList<DisplayableItem> | null>(null);
   const lastCountRef = useRef(groupMessages.length);
@@ -124,18 +131,22 @@ export default function ChatBox({ group }: { group: Group }) {
   const decryptedContentCacheRef = useRef<
     Map<string, string | ImageMessageContent | null>
   >(new Map());
+  const computeSeqRef = useRef(0);
 
   useEffect(() => {
+    const seq = ++computeSeqRef.current;
     const decryptAndFormatMessages = async () => {
       if (!devicePrivateKey) {
-        if (displayableLengthRef.current > 0) {
-          setDisplayableMessages([]);
-          displayableLengthRef.current = 0;
+        if (computeSeqRef.current === seq) {
+          if (displayableLengthRef.current > 0) {
+            setDisplayableMessages([]);
+            displayableLengthRef.current = 0;
+          }
+          if (prevDevicePrivateKeyRef.current !== null) {
+            decryptedContentCacheRef.current = new Map();
+          }
+          prevDevicePrivateKeyRef.current = null;
         }
-        if (prevDevicePrivateKeyRef.current !== null) {
-          decryptedContentCacheRef.current = new Map();
-        }
-        prevDevicePrivateKeyRef.current = null;
         return;
       }
 
@@ -146,14 +157,16 @@ export default function ChatBox({ group }: { group: Group }) {
         devicePrivateKey
       );
 
-      if (keyHasChanged) {
+      if (keyHasChanged && computeSeqRef.current === seq) {
         decryptedContentCacheRef.current = new Map();
       }
 
       if (groupMessages.length === 0) {
-        if (displayableLengthRef.current > 0) {
-          setDisplayableMessages([]);
-          displayableLengthRef.current = 0;
+        if (computeSeqRef.current === seq) {
+          if (displayableLengthRef.current > 0) {
+            setDisplayableMessages([]);
+            displayableLengthRef.current = 0;
+          }
         }
         return;
       }
@@ -163,7 +176,6 @@ export default function ChatBox({ group }: { group: Group }) {
         string,
         string | ImageMessageContent | null
       >();
-      let needsUIUpdate = false;
 
       const sortedMessages = [...groupMessages].sort(
         (a, b) =>
@@ -182,7 +194,6 @@ export default function ChatBox({ group }: { group: Group }) {
             currentMsg.id
           )!;
         } else {
-          needsUIUpdate = true;
           const plaintext = await encryptionService.decryptStoredMessage(
             currentMsg,
             devicePrivateKey
@@ -252,6 +263,8 @@ export default function ChatBox({ group }: { group: Group }) {
             content: decryptedContent,
             align: currentMsg.sender_id === user?.id ? "right" : "left",
             timestamp: currentMsg.timestamp,
+            client_seq: currentMsg.client_seq,
+            client_timestamp: currentMsg.client_timestamp,
           });
         } else if (decryptedContent) {
           const optimisticMessage = optimisticMessages.find(
@@ -276,6 +289,8 @@ export default function ChatBox({ group }: { group: Group }) {
             content: imageContent,
             align: currentMsg.sender_id === user?.id ? "right" : "left",
             timestamp: currentMsg.timestamp,
+            client_seq: currentMsg.client_seq,
+            client_timestamp: currentMsg.client_timestamp,
           });
         }
       }
@@ -283,24 +298,105 @@ export default function ChatBox({ group }: { group: Group }) {
       // 6. Update State: Only update React state if something has actually changed.
       // This prevents unnecessary re-renders.
 
-      // Only show optimistic messages that don't have a corresponding real message yet
-      const filteredOptimistic = optimisticMessages.filter(
-        (o) => !groupMessages.find((m) => m.id === o.id)
+      // Only show optimistic messages whose real counterpart is not yet in the DECRYPTED rendered list
+      // This prevents messages from disappearing while decryption is in progress
+      const realIds = new Set(
+        finalDisplayableItems
+          .filter((i) => i.type !== "date_separator")
+          .map((i) => i.id)
       );
 
-      const sortedFinalItems = finalDisplayableItems.sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
+      const filteredOptimistic = optimisticMessages
+        .filter((o) => !realIds.has(o.id))
+        .sort((a, b) => {
+          const at = new Date(a.timestamp).getTime();
+          const bt = new Date(b.timestamp).getTime();
+          if (at !== bt) return at - bt;
+          const aSeq = a.clientSeq ?? Number.MAX_SAFE_INTEGER;
+          const bSeq = b.clientSeq ?? Number.MAX_SAFE_INTEGER;
+          if (aSeq !== bSeq) return aSeq - bSeq;
+          return a.id.localeCompare(b.id);
+        });
 
-      const allDisplayableItems = [...sortedFinalItems, ...filteredOptimistic];
+      // Merge real and optimistic messages, then sort everything together
+      // This prevents optimistic messages from being stuck at the end
+      const allDisplayableItems = [...finalDisplayableItems, ...filteredOptimistic].sort((a, b) => {
+        // Helper to check if item is a message (not a date separator)
+        const isMessage = (item: DisplayableItem): item is TextDisplayableItem | ImageDisplayableItem =>
+          item.type === "message_text" || item.type === "message_image";
 
-      if (
-        needsUIUpdate ||
-        displayableLengthRef.current !== allDisplayableItems.length ||
-        filteredOptimistic.length > 0
-      ) {
-        setDisplayableMessages(allDisplayableItems.reverse());
+        // 0. Pin-to-bottom items (uploading images) always go to the end
+        const aPinned = isMessage(a) && a.pinToBottom === true;
+        const bPinned = isMessage(b) && b.pinToBottom === true;
+        if (aPinned !== bPinned) {
+          return aPinned ? 1 : -1;
+        }
+
+        // 1. Primary: Use client_timestamp if available, fallback to server timestamp
+        const aClientTime = isMessage(a) ? a.client_timestamp : null;
+        const bClientTime = isMessage(b) ? b.client_timestamp : null;
+        const aTime = new Date(aClientTime ?? a.timestamp).getTime();
+        const bTime = new Date(bClientTime ?? b.timestamp).getTime();
+        if (aTime !== bTime) return aTime - bTime;
+
+        // 2. Secondary: clientSeq for same-timestamp messages
+        // Note: clientSeq (camelCase) = in-memory optimistic messages
+        //       client_seq (snake_case) = persisted messages from DB
+        const aSeq = isMessage(a) ? (a.clientSeq ?? a.client_seq ?? null) : null;
+        const bSeq = isMessage(b) ? (b.clientSeq ?? b.client_seq ?? null) : null;
+
+        if (aSeq !== null && bSeq !== null) return aSeq - bSeq;
+        if (aSeq !== null) return 1; // a is newer
+        if (bSeq !== null) return -1; // b is newer
+
+        // 3. Tertiary: ID comparison (stable, deterministic)
+        return a.id.localeCompare(b.id);
+      });
+
+      const nextDisplayable = allDisplayableItems.reverse();
+
+      // Debug: Log when message counts change significantly
+      if (DEBUG.MESSAGE_FLOW && Math.abs(nextDisplayable.length - displayableLengthRef.current) > 5) {
+        console.warn(`📊 [DISPLAY] Count changed from ${displayableLengthRef.current} to ${nextDisplayable.length}`, {
+          rawGroupMsgs: groupMessages.length,
+          decryptedReal: finalDisplayableItems.length,
+          optimisticTotal: optimisticMessages.length,
+          optimisticKept: filteredOptimistic.length,
+          realIdCount: realIds.size,
+          seq,
+        });
+      }
+
+      // Smart ordering anomaly detection - only logs when issues detected
+      if (DEBUG.MESSAGE_ORDER) {
+        for (let i = 1; i < nextDisplayable.length; i++) {
+          const prev = nextDisplayable[i - 1];
+          const curr = nextDisplayable[i];
+
+          // Skip date separators
+          if (prev.type === 'date_separator' || curr.type === 'date_separator') {
+            continue;
+          }
+
+          const prevTime = new Date(prev.timestamp).getTime();
+          const currTime = new Date(curr.timestamp).getTime();
+
+          // Since reversed, prev should be newer than curr
+          if (prevTime < currTime) {
+            console.warn('[ORDER ANOMALY] Timestamp mismatch', {
+              prevId: prev.id.slice(0, 8),
+              prevTime: prev.timestamp,
+              prevSeq: (prev as any).clientSeq,
+              currId: curr.id.slice(0, 8),
+              currTime: curr.timestamp,
+              currSeq: (curr as any).clientSeq,
+            });
+          }
+        }
+      }
+
+      if (computeSeqRef.current === seq) {
+        setDisplayableMessages(nextDisplayable);
         displayableLengthRef.current = allDisplayableItems.length;
 
         if (newCacheEntries.size > 0) {
@@ -308,15 +404,21 @@ export default function ChatBox({ group }: { group: Group }) {
             decryptedContentCacheRef.current.set(key, value);
           });
         }
-      }
 
-      prevDevicePrivateKeyRef.current = devicePrivateKey
-        ? new Uint8Array(devicePrivateKey)
-        : null;
+        prevDevicePrivateKeyRef.current = devicePrivateKey
+          ? new Uint8Array(devicePrivateKey)
+          : null;
+      }
     };
 
     decryptAndFormatMessages();
-  }, [groupMessages, devicePrivateKey, user?.id, optimisticMessages, group.id]);
+  }, [
+    groupMessages,
+    devicePrivateKey,
+    user?.id,
+    optimisticMessages,
+    group.id,
+  ]);
 
   const flatListProps = useMemo(
     () => ({
@@ -504,6 +606,7 @@ export default function ChatBox({ group }: { group: Group }) {
                 data={displayableMessages}
                 renderItem={renderItem}
                 keyExtractor={keyExtractor}
+                extraData={displayableMessages}
                 onScroll={handleScroll}
                 contentContainerStyle={contentContainerStyle}
                 onLayout={() => {

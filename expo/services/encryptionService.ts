@@ -112,9 +112,8 @@ export const processAndDecodeIncomingMessage = (
   );
 
   if (!envelope) {
-    console.warn(
-      `No envelope found for device ${currentDeviceId} in message ${messageId}`
-    );
+    // This is expected for historical messages or messages not intended for this device
+    // Silently skip - not an error condition
     return null;
   }
 
@@ -124,6 +123,8 @@ export const processAndDecodeIncomingMessage = (
       group_id: rawMessage.group_id,
       sender_id: senderId,
       timestamp: timestamp,
+      client_seq: null,
+      client_timestamp: null,
 
       ciphertext: base64ToUint8Array(rawMessage.ciphertext),
       message_type: rawMessage.messageType,

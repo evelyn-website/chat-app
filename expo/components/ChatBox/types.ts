@@ -8,6 +8,10 @@ export type TextDisplayableItem = {
   content: string; // Plaintext
   align: "left" | "right";
   timestamp: string;
+  clientSeq?: number; // Optimistic (in-memory)
+  client_seq?: number | null; // Persisted (from DB)
+  client_timestamp?: string | null;
+  pinToBottom?: boolean; // Keep at bottom while sending (optimistic only)
 };
 
 export type ImageDisplayableItem = {
@@ -18,6 +22,10 @@ export type ImageDisplayableItem = {
   content: ImageMessageContent;
   align: "left" | "right";
   timestamp: string;
+  clientSeq?: number;
+  client_seq?: number | null;
+  client_timestamp?: string | null;
+  pinToBottom?: boolean; // Keep at bottom while sending (optimistic only)
 };
 
 export type DateSeparatorItem = {
@@ -27,6 +35,8 @@ export type DateSeparatorItem = {
   dateString: string;
   timestamp: string;
 };
+
+export type OptimisticMessageItem = TextDisplayableItem | ImageDisplayableItem;
 
 export type DisplayableItem =
   | TextDisplayableItem

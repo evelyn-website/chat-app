@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
@@ -8,13 +9,14 @@ import {
   encryptAndPrepareMessageForSending,
   encryptImageFile,
   createImageMessagePayload,
-  readImageAsBytes,
+  // readImageAsBytes,
   base64ToUint8Array,
+  uint8ArrayToBase64,
 } from "@/services/encryptionService";
 import { ImageMessageContent, RecipientDevicePublicKey } from "@/types/types";
 import { processImage } from "@/services/imageService";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
-import { DisplayableItem } from "@/components/ChatBox/types";
+import { OptimisticMessageItem } from "@/components/ChatBox/types";
 import { v4 } from "uuid";
 
 interface UseSendImageReturn {
@@ -32,7 +34,7 @@ const baseURL = `${process.env.EXPO_PUBLIC_HOST}/images`;
 export const useSendImage = (): UseSendImageReturn => {
   const [isSendingImage, setIsSendingImage] = useState(false);
   const [imageSendError, setImageSendError] = useState<string | null>(null);
-  const { addOptimisticDisplayable } = useMessageStore();
+  const { addOptimisticDisplayable, removeOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
@@ -45,7 +47,8 @@ export const useSendImage = (): UseSendImageReturn => {
     ): Promise<void> => {
       setIsSendingImage(true);
       setImageSendError(null);
-      let normalizedImageUri: string | undefined;
+      // Keep for potential future use; avoid unused var warnings
+      // let normalizedImageUri: string | undefined;
 
       if (!currentUser) {
         const errorMsg = "User not authenticated. Cannot send image.";
@@ -54,14 +57,16 @@ export const useSendImage = (): UseSendImageReturn => {
         return;
       }
 
+      const id = v4();
+
       try {
         const processedData = await processImage(imageAsset.uri);
-        normalizedImageUri = processedData.normalized.uri;
+        // normalizedImageUri = processedData.normalized.uri;
 
         const { normalized, blurhash } = processedData;
 
-        const id = v4();
         const timestamp = new Date().toISOString();
+        const clientSeq = getNextClientSeq();
 
         const localUri = normalized.uri;
         const placeholderContent: ImageMessageContent = {
@@ -75,7 +80,7 @@ export const useSendImage = (): UseSendImageReturn => {
           localUri: localUri,
         };
 
-        const optimisticItem: DisplayableItem = {
+        const optimisticItem: OptimisticMessageItem = {
           type: "message_image",
           id,
           groupId: groupId,
@@ -83,6 +88,9 @@ export const useSendImage = (): UseSendImageReturn => {
           content: placeholderContent,
           align: "right",
           timestamp,
+          clientSeq,
+          client_timestamp: timestamp,
+          pinToBottom: true, // Keep at bottom while uploading
         };
         addOptimisticDisplayable(optimisticItem);
 
@@ -129,13 +137,33 @@ export const useSendImage = (): UseSendImageReturn => {
         });
         const { uploadUrl, objectKey } = presignResponse.data;
 
-        const uploadResponse = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: encryptedBlob,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`S3 Upload Failed: ${await uploadResponse.text()}`);
+        // Write encrypted blob to temporary file
+        const cacheDir = FileSystem.cacheDirectory;
+        if (!cacheDir) {
+          throw new Error("File system cache directory unavailable on this platform.");
+        }
+        const tempUri = `${cacheDir}temp_upload_${Date.now()}.bin`;
+        await FileSystem.writeAsStringAsync(
+          tempUri,
+          uint8ArrayToBase64(encryptedBlob),
+          {
+            encoding: FileSystem.EncodingType.Base64,
+          }
+        );
+
+        try {
+          // Upload using FileSystem.uploadAsync - the standard approach for binary uploads in Expo
+          const uploadResponse = await FileSystem.uploadAsync(uploadUrl, tempUri, {
+            httpMethod: "PUT",
+            headers: { "Content-Type": "application/octet-stream" },
+          });
+
+          if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
+            throw new Error(`S3 Upload Failed: ${uploadResponse.body}`);
+          }
+        } finally {
+          // Always clean up temporary file
+          await FileSystem.deleteAsync(tempUri, { idempotent: true });
         }
 
         const plaintextPayload = createImageMessagePayload(
@@ -161,6 +189,7 @@ export const useSendImage = (): UseSendImageReturn => {
         sendPacketOverSocket(rawMessagePayload);
       } catch (error: any) {
         console.error("Error in sendImage process:", error);
+        removeOptimisticDisplayable(groupId, id);
         setImageSendError(
           error.message || "An unexpected error occurred while sending image."
         );
@@ -173,6 +202,8 @@ export const useSendImage = (): UseSendImageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      removeOptimisticDisplayable,
+      getNextClientSeq,
     ]
   );
 
