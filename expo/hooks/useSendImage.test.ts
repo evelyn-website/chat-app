@@ -3,19 +3,11 @@ import { useSendImage } from './useSendImage';
 import { useWebSocket } from '@/components/context/WebSocketContext';
 import { useGlobalStore } from '@/components/context/GlobalStoreContext';
 import { useMessageStore } from '@/components/context/MessageStoreContext';
-import * as imageService from '@/services/imageService';
-import * as encryptionService from '@/services/encryptionService';
-import * as FileSystem from 'expo-file-system';
-import http from '@/util/custom-axios';
 
 // Mock dependencies
 jest.mock('@/components/context/WebSocketContext');
 jest.mock('@/components/context/GlobalStoreContext');
 jest.mock('@/components/context/MessageStoreContext');
-jest.mock('@/services/imageService');
-jest.mock('@/services/encryptionService');
-jest.mock('expo-file-system');
-jest.mock('@/util/custom-axios');
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid'),
 }));
@@ -54,20 +46,20 @@ describe('useSendImage', () => {
 
   describe('Hook interface', () => {
     it('should return sendImage function', () => {
-      const { result } = renderHook(() => useSendImage('group-123'));
+      const { result } = renderHook(() => useSendImage());
 
       expect(typeof result.current.sendImage).toBe('function');
     });
 
     it('should return isSendingImage state', () => {
-      const { result } = renderHook(() => useSendImage('group-123'));
+      const { result } = renderHook(() => useSendImage());
 
       expect(typeof result.current.isSendingImage).toBe('boolean');
       expect(result.current.isSendingImage).toBe(false);
     });
 
     it('should return imageSendError state', () => {
-      const { result } = renderHook(() => useSendImage('group-123'));
+      const { result } = renderHook(() => useSendImage());
 
       expect(result.current.imageSendError).toBeNull();
     });
@@ -80,12 +72,12 @@ describe('useSendImage', () => {
         getDeviceKeysForUser: mockGetDeviceKeysForUser,
       });
 
-      const { result } = renderHook(() => useSendImage('group-123'));
+      const { result } = renderHook(() => useSendImage());
 
       const mockImageAsset = { uri: 'file:///test.jpg', width: 100, height: 100 };
 
       await act(async () => {
-        await result.current.sendImage(mockImageAsset as any);
+        await result.current.sendImage(mockImageAsset as any, 'group-123', []);
       });
 
       expect(result.current.imageSendError).toBeTruthy();
