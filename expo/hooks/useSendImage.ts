@@ -137,7 +137,11 @@ export const useSendImage = (): UseSendImageReturn => {
         const { uploadUrl, objectKey } = presignResponse.data;
 
         // Write encrypted blob to temporary file
-        const tempUri = `${FileSystem.cacheDirectory}temp_upload_${Date.now()}.bin`;
+        const cacheDir = FileSystem.cacheDirectory;
+        if (!cacheDir) {
+          throw new Error("File system cache directory unavailable on this platform.");
+        }
+        const tempUri = `${cacheDir}temp_upload_${Date.now()}.bin`;
         await FileSystem.writeAsStringAsync(
           tempUri,
           uint8ArrayToBase64(encryptedBlob),
@@ -153,7 +157,7 @@ export const useSendImage = (): UseSendImageReturn => {
             headers: { "Content-Type": "application/octet-stream" },
           });
 
-          if (uploadResponse.status !== 200) {
+          if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
             throw new Error(`S3 Upload Failed: ${uploadResponse.body}`);
           }
         } finally {
