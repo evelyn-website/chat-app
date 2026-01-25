@@ -165,6 +165,7 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
     } catch (error) {
       if (error instanceof CanceledError) {
         console.log("loadRelevantDeviceKeys: Fetch operation was canceled.");
+        dispatch({ type: "SET_RELEVANT_DEVICE_KEYS_LOADING", payload: false });
       } else {
         console.error("Failed to load relevant device keys:", error);
         dispatch({

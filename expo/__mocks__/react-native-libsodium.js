@@ -37,6 +37,7 @@ const NONCEBYTES = 24;
 const BOXSEALBYTES = 48;
 
 let keyCounter = 0;
+let randomBytesCounter = 0;
 
 module.exports = {
   // Key generation
@@ -213,7 +214,8 @@ module.exports = {
 
   // Random bytes generation
   randombytes_buf: jest.fn((length) => {
-    return createDeterministicArray('random_' + Date.now(), length);
+    randomBytesCounter++;
+    return createDeterministicArray('random_' + randomBytesCounter, length);
   }),
 
   // Constants
@@ -235,5 +237,6 @@ module.exports = {
   // Reset function for testing
   __reset__: jest.fn(() => {
     keyCounter = 0;
+    randomBytesCounter = 0;
   }),
 };

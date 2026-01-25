@@ -637,7 +637,7 @@ describe('deviceService', () => {
 
     it('should handle errors when clearing public key', async () => {
       let clearCallCount = 0;
-      (customStore.clear as jest.Mock).mockImplementationOnce(() => {
+      (customStore.clear as jest.Mock).mockImplementation(() => {
         clearCallCount++;
         if (clearCallCount === 1) return Promise.resolve();
         return Promise.reject(new Error('Clear error'));

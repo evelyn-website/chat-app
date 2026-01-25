@@ -48,20 +48,20 @@ describe('useSendMessage', () => {
 
   describe('Hook interface', () => {
     it('should return sendMessage function', () => {
-      const { result } = renderHook(() => useSendMessage('group-123'));
+      const { result } = renderHook(() => useSendMessage());
 
       expect(typeof result.current.sendMessage).toBe('function');
     });
 
     it('should return isSending state', () => {
-      const { result } = renderHook(() => useSendMessage('group-123'));
+      const { result } = renderHook(() => useSendMessage());
 
       expect(typeof result.current.isSending).toBe('boolean');
       expect(result.current.isSending).toBe(false);
     });
 
     it('should return sendError state', () => {
-      const { result } = renderHook(() => useSendMessage('group-123'));
+      const { result } = renderHook(() => useSendMessage());
 
       expect(result.current.sendError).toBeNull();
     });
@@ -74,10 +74,10 @@ describe('useSendMessage', () => {
         getDeviceKeysForUser: mockGetDeviceKeysForUser,
       });
 
-      const { result } = renderHook(() => useSendMessage('group-123'));
+      const { result } = renderHook(() => useSendMessage());
 
       await act(async () => {
-        await result.current.sendMessage('Hello');
+        await result.current.sendMessage('Hello', 'group-123', ['user-456']);
       });
 
       expect(result.current.sendError).toBeTruthy();
