@@ -156,6 +156,22 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const updateOptimisticMessage = useCallback(
+    (groupId: string, id: string, updates: { timestamp?: string; pinToBottom?: boolean }) => {
+      setOptimistic((o) => {
+        const list = o[groupId];
+        if (!list) return o;
+        return {
+          ...o,
+          [groupId]: list.map((item): OptimisticMessageItem =>
+            item.id === id ? { ...item, ...updates } : item
+          ),
+        };
+      });
+    },
+    []
+  );
+
   // Keep optimisticRef in sync with optimistic state to avoid circular dependency
   useEffect(() => {
     optimisticRef.current = optimistic;
@@ -279,6 +295,15 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         (m) => m.id === rawMsg.id
       );
 
+      // Update optimistic message with server timestamp and unpin from bottom
+      // This allows it to sort correctly while waiting for decryption
+      if (optimisticMsg) {
+        updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
+          timestamp: rawMsg.timestamp,
+          pinToBottom: false,
+        });
+      }
+
       const baseProcessed =
         encryptionService.processAndDecodeIncomingMessage(
           rawMsg,
@@ -324,6 +349,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     store,
     globalDeviceId,
     refreshGroups,
+    updateOptimisticMessage,
   ]);
 
   const getMessagesForGroup = useCallback(

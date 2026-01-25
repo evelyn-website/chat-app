@@ -28,7 +28,7 @@ import { useMessageStore } from "../context/MessageStoreContext";
 import { Group, ImageMessageContent } from "@/types/types";
 import * as deviceService from "@/services/deviceService";
 import * as encryptionService from "@/services/encryptionService";
-import { DisplayableItem } from "./types";
+import { DisplayableItem, TextDisplayableItem, ImageDisplayableItem } from "./types";
 import ImageBubble from "./ImageBubble";
 import { router } from "expo-router";
 import { DEBUG } from "@/utils/debug";
@@ -305,14 +305,15 @@ export default function ChatBox({ group }: { group: Group }) {
           .filter((i) => i.type !== "date_separator")
           .map((i) => i.id)
       );
+
       const filteredOptimistic = optimisticMessages
         .filter((o) => !realIds.has(o.id))
         .sort((a, b) => {
           const at = new Date(a.timestamp).getTime();
           const bt = new Date(b.timestamp).getTime();
           if (at !== bt) return at - bt;
-          const aSeq = (a as any).clientSeq ?? Number.MAX_SAFE_INTEGER;
-          const bSeq = (b as any).clientSeq ?? Number.MAX_SAFE_INTEGER;
+          const aSeq = a.clientSeq ?? Number.MAX_SAFE_INTEGER;
+          const bSeq = b.clientSeq ?? Number.MAX_SAFE_INTEGER;
           if (aSeq !== bSeq) return aSeq - bSeq;
           return a.id.localeCompare(b.id);
         });
@@ -320,14 +321,27 @@ export default function ChatBox({ group }: { group: Group }) {
       // Merge real and optimistic messages, then sort everything together
       // This prevents optimistic messages from being stuck at the end
       const allDisplayableItems = [...finalDisplayableItems, ...filteredOptimistic].sort((a, b) => {
+        // Helper to check if item is a message (not a date separator)
+        const isMessage = (item: DisplayableItem): item is TextDisplayableItem | ImageDisplayableItem =>
+          item.type === "message_text" || item.type === "message_image";
+
+        // 0. Pin-to-bottom items (uploading images) always go to the end
+        const aPinned = isMessage(a) && a.pinToBottom === true;
+        const bPinned = isMessage(b) && b.pinToBottom === true;
+        if (aPinned !== bPinned) {
+          return aPinned ? 1 : -1;
+        }
+
         // 1. Primary: Use client_timestamp if available, fallback to server timestamp
-        const aTime = new Date((a as any).client_timestamp ?? a.timestamp).getTime();
-        const bTime = new Date((b as any).client_timestamp ?? b.timestamp).getTime();
+        const aClientTime = isMessage(a) ? a.client_timestamp : null;
+        const bClientTime = isMessage(b) ? b.client_timestamp : null;
+        const aTime = new Date(aClientTime ?? a.timestamp).getTime();
+        const bTime = new Date(bClientTime ?? b.timestamp).getTime();
         if (aTime !== bTime) return aTime - bTime;
 
         // 2. Secondary: clientSeq for same-timestamp messages
-        const aSeq = (a as any).clientSeq ?? (a as any).client_seq ?? null;
-        const bSeq = (b as any).clientSeq ?? (b as any).client_seq ?? null;
+        const aSeq = isMessage(a) ? (a.clientSeq ?? a.client_seq ?? null) : null;
+        const bSeq = isMessage(b) ? (b.clientSeq ?? b.client_seq ?? null) : null;
 
         if (aSeq !== null && bSeq !== null) return aSeq - bSeq;
         if (aSeq !== null) return 1; // a is newer

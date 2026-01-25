@@ -89,6 +89,7 @@ export const useSendImage = (): UseSendImageReturn => {
           timestamp,
           clientSeq,
           client_timestamp: timestamp,
+          pinToBottom: true, // Keep at bottom while uploading
         };
         addOptimisticDisplayable(optimisticItem);
 

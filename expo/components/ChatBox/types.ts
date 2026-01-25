@@ -11,6 +11,7 @@ export type TextDisplayableItem = {
   clientSeq?: number; // Optimistic (in-memory)
   client_seq?: number | null; // Persisted (from DB)
   client_timestamp?: string | null;
+  pinToBottom?: boolean; // Keep at bottom while sending (optimistic only)
 };
 
 export type ImageDisplayableItem = {
@@ -24,6 +25,7 @@ export type ImageDisplayableItem = {
   clientSeq?: number;
   client_seq?: number | null;
   client_timestamp?: string | null;
+  pinToBottom?: boolean; // Keep at bottom while sending (optimistic only)
 };
 
 export type DateSeparatorItem = {

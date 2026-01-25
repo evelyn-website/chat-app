@@ -88,7 +88,7 @@ const MessageEntry = ({
   // DEV ONLY: Send burst of messages for testing
   const handleSendBurst = async () => {
     if (!user) return;
-    const count = 20;
+    const count = 40;
     const startTime = Date.now();
     console.log(`🚀 [BURST] Starting burst of ${count} messages`);
 
