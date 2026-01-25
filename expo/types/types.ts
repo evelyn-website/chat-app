@@ -84,6 +84,8 @@ export interface DbMessage {
   sender_id: string;
   group_id: string;
   timestamp: string;
+  client_seq: number | null;
+  client_timestamp: string | null;
   ciphertext: Uint8Array;
   message_type: MessageType;
   msg_nonce: Uint8Array;

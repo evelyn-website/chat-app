@@ -123,6 +123,8 @@ export const processAndDecodeIncomingMessage = (
       group_id: rawMessage.group_id,
       sender_id: senderId,
       timestamp: timestamp,
+      client_seq: null,
+      client_timestamp: null,
 
       ciphertext: base64ToUint8Array(rawMessage.ciphertext),
       message_type: rawMessage.messageType,

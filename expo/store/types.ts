@@ -44,6 +44,8 @@ export interface MessageRow {
   user_id: string;
   group_id: string;
   timestamp: string;
+  client_seq: number | null;
+  client_timestamp: string | null;
   username: string;
   ciphertext: Uint8Array;
   message_type: MessageType;

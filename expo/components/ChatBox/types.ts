@@ -8,7 +8,9 @@ export type TextDisplayableItem = {
   content: string; // Plaintext
   align: "left" | "right";
   timestamp: string;
-  clientSeq?: number;
+  clientSeq?: number; // Optimistic (in-memory)
+  client_seq?: number | null; // Persisted (from DB)
+  client_timestamp?: string | null;
 };
 
 export type ImageDisplayableItem = {
@@ -20,6 +22,8 @@ export type ImageDisplayableItem = {
   align: "left" | "right";
   timestamp: string;
   clientSeq?: number;
+  client_seq?: number | null;
+  client_timestamp?: string | null;
 };
 
 export type DateSeparatorItem = {

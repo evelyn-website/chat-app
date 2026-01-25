@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
@@ -10,6 +11,7 @@ import {
   createImageMessagePayload,
   // readImageAsBytes,
   base64ToUint8Array,
+  uint8ArrayToBase64,
 } from "@/services/encryptionService";
 import { ImageMessageContent, RecipientDevicePublicKey } from "@/types/types";
 import { processImage } from "@/services/imageService";
@@ -32,8 +34,7 @@ const baseURL = `${process.env.EXPO_PUBLIC_HOST}/images`;
 export const useSendImage = (): UseSendImageReturn => {
   const [isSendingImage, setIsSendingImage] = useState(false);
   const [imageSendError, setImageSendError] = useState<string | null>(null);
-  const { addOptimisticDisplayable } = useMessageStore();
-  const clientSequenceRef = useRef(0);
+  const { addOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
@@ -64,6 +65,7 @@ export const useSendImage = (): UseSendImageReturn => {
 
         const id = v4();
         const timestamp = new Date().toISOString();
+        const clientSeq = getNextClientSeq();
 
         const localUri = normalized.uri;
         const placeholderContent: ImageMessageContent = {
@@ -85,7 +87,8 @@ export const useSendImage = (): UseSendImageReturn => {
           content: placeholderContent,
           align: "right",
           timestamp,
-          clientSeq: ++clientSequenceRef.current,
+          clientSeq,
+          client_timestamp: timestamp,
         };
         addOptimisticDisplayable(optimisticItem);
 
@@ -132,13 +135,29 @@ export const useSendImage = (): UseSendImageReturn => {
         });
         const { uploadUrl, objectKey } = presignResponse.data;
 
-        const uploadResponse = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: encryptedBlob,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`S3 Upload Failed: ${await uploadResponse.text()}`);
+        // Write encrypted blob to temporary file
+        const tempUri = `${FileSystem.cacheDirectory}temp_upload_${Date.now()}.bin`;
+        await FileSystem.writeAsStringAsync(
+          tempUri,
+          uint8ArrayToBase64(encryptedBlob),
+          {
+            encoding: FileSystem.EncodingType.Base64,
+          }
+        );
+
+        try {
+          // Upload using FileSystem.uploadAsync - the standard approach for binary uploads in Expo
+          const uploadResponse = await FileSystem.uploadAsync(uploadUrl, tempUri, {
+            httpMethod: "PUT",
+            headers: { "Content-Type": "application/octet-stream" },
+          });
+
+          if (uploadResponse.status !== 200) {
+            throw new Error(`S3 Upload Failed: ${uploadResponse.body}`);
+          }
+        } finally {
+          // Always clean up temporary file
+          await FileSystem.deleteAsync(tempUri, { idempotent: true });
         }
 
         const plaintextPayload = createImageMessagePayload(
@@ -176,6 +195,7 @@ export const useSendImage = (): UseSendImageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      getNextClientSeq,
     ]
   );
 

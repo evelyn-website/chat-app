@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useWebSocket } from "../components/context/WebSocketContext";
 import { useGlobalStore } from "../components/context/GlobalStoreContext";
 import * as encryptionService from "@/services/encryptionService";
@@ -22,8 +22,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
 
   const { sendMessage: sendPacketOverSocket } = useWebSocket();
   const { user: currentUser, getDeviceKeysForUser } = useGlobalStore();
-  const { addOptimisticDisplayable } = useMessageStore();
-  const clientSequenceRef = useRef(0);
+  const { addOptimisticDisplayable, getNextClientSeq } = useMessageStore();
 
   const sendMessage = useCallback(
     async (
@@ -44,6 +43,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
 
       const id = v4();
       const timestamp = new Date().toISOString();
+      const clientSeq = getNextClientSeq();
 
       const optimisticItem: DisplayableItem = {
         type: "message_text",
@@ -53,7 +53,8 @@ export const useSendMessage = (): UseSendMessageReturn => {
         content: plaintext,
         align: "right",
         timestamp,
-        clientSeq: ++clientSequenceRef.current,
+        clientSeq,
+        client_timestamp: timestamp,
       };
       addOptimisticDisplayable(optimisticItem);
 
@@ -118,6 +119,7 @@ export const useSendMessage = (): UseSendMessageReturn => {
       getDeviceKeysForUser,
       sendPacketOverSocket,
       addOptimisticDisplayable,
+      getNextClientSeq,
     ]
   );
 

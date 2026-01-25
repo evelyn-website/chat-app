@@ -37,7 +37,7 @@ interface MessageStoreContextType {
   optimistic: Record<string, DisplayableItem[]>;
   addOptimisticDisplayable: (item: DisplayableItem) => void;
   removeOptimisticDisplayable: (groupId: string, id: string) => void;
-  getClientSeqForMessageId: (id: string) => number | undefined;
+  getNextClientSeq: () => number;
 }
 
 const initialState: MessageState = {
@@ -111,9 +111,13 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const [optimistic, setOptimistic] = useState<
     Record<string, DisplayableItem[]>
   >({});
-  const clientSeqByIdRef = useRef<Map<string, number>>(new Map());
 
+  const globalClientSequenceRef = useRef(0);
   const hasLoadedHistoricalMessagesRef = useRef(false);
+
+  const getNextClientSeq = useCallback(() => {
+    return ++globalClientSequenceRef.current;
+  }, []);
 
   const addOptimisticDisplayable = useCallback(
     (item: DisplayableItem) => {
@@ -129,10 +133,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           });
         }
 
-        const seq = (item as any).clientSeq;
-        if (typeof seq === "number") {
-          clientSeqByIdRef.current.set(item.id, seq);
-        }
         return newState;
       });
     },
@@ -185,15 +185,21 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         const processedMessages: DbMessage[] = [];
 
         for (const rawMsg of rawMessages) {
-          const processed = encryptionService.processAndDecodeIncomingMessage(
+          const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
             rawMsg,
             preferredDeviceId,
             rawMsg.sender_id,
             rawMsg.id,
             rawMsg.timestamp
           );
-          if (processed) {
-            processedMessages.push(processed);
+          if (baseProcessed) {
+            // Historical messages don't have client metadata (NULL values OK)
+            const processedMessage: DbMessage = {
+              ...baseProcessed,
+              client_seq: null,
+              client_timestamp: null,
+            };
+            processedMessages.push(processedMessage);
             // Note: Optimistic messages will be filtered out by ChatBox automatically
           }
           // Note: processAndDecodeIncomingMessage returns null for messages without
@@ -250,7 +256,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       store,
       globalDeviceId,
       refreshGroups,
-      removeOptimisticDisplayable,
     ]
   );
 
@@ -263,7 +268,12 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
-      const processedMessage =
+      // Find optimistic message to extract client metadata
+      const optimisticMsg = optimistic[rawMsg.group_id]?.find(
+        (m) => m.id === rawMsg.id
+      );
+
+      const baseProcessed =
         encryptionService.processAndDecodeIncomingMessage(
           rawMsg,
           globalDeviceId,
@@ -272,11 +282,18 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           rawMsg.timestamp
         );
 
-      if (processedMessage) {
+      if (baseProcessed) {
+        const processedMessage: DbMessage = {
+          ...baseProcessed,
+          client_seq: (optimisticMsg && 'clientSeq' in optimisticMsg) ? (optimisticMsg.clientSeq ?? null) : null,
+          client_timestamp: optimisticMsg?.timestamp ?? null,
+        };
+
         if (DEBUG.MESSAGE_FLOW) {
           console.log('[MSG] Server confirmed', {
             id: processedMessage.id.slice(0, 8),
             time: new Date(processedMessage.timestamp).toISOString().slice(11, 23),
+            clientSeq: processedMessage.client_seq,
           });
         }
 
@@ -301,7 +318,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     store,
     globalDeviceId,
     refreshGroups,
-    removeOptimisticDisplayable,
+    optimistic,
   ]);
 
   const getMessagesForGroup = useCallback(
@@ -310,10 +327,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     [state.messages]
   );
-
-  const getClientSeqForMessageId = useCallback((id: string) => {
-    return clientSeqByIdRef.current.get(id);
-  }, []);
 
   const value = useMemo(
     () => ({
@@ -324,7 +337,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
-      getClientSeqForMessageId,
+      getNextClientSeq,
     }),
     [
       getMessagesForGroup,
@@ -334,7 +347,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
-      getClientSeqForMessageId,
+      getNextClientSeq,
     ]
   );
 

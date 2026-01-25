@@ -19,7 +19,7 @@ export class Store implements IStore {
       throw new Error("Database not available for initialization.");
     }
 
-    const TARGET_DATABASE_VERSION = 9;
+    const TARGET_DATABASE_VERSION = 10;
 
     let { user_version: currentDbVersion } = (await this.db.getFirstAsync<{
       user_version: number;
@@ -251,6 +251,30 @@ export class Store implements IStore {
       }
     }
 
+    if (currentDbVersion === 9) {
+      console.log("Migrating to version 10 (Client ordering metadata)...");
+      await this.db.execAsync("BEGIN TRANSACTION;");
+      try {
+        await this.db.execAsync(`
+          ALTER TABLE messages ADD COLUMN client_seq INTEGER;
+        `);
+        await this.db.execAsync(`
+          ALTER TABLE messages ADD COLUMN client_timestamp TEXT;
+        `);
+        await this.db.execAsync(`
+          CREATE INDEX idx_messages_client_seq ON messages(client_seq);
+        `);
+        await this.db.execAsync("COMMIT;");
+        await this.db.execAsync(`PRAGMA user_version = 10`);
+        currentDbVersion = 10;
+        console.log("Successfully migrated to version 10.");
+      } catch (error) {
+        await this.db.execAsync("ROLLBACK;");
+        console.error("Error migrating database to version 10:", error);
+        throw error;
+      }
+    }
+
     if (currentDbVersion === TARGET_DATABASE_VERSION) {
       console.log("Database is up to date.");
     } else if (currentDbVersion < TARGET_DATABASE_VERSION) {
@@ -367,14 +391,16 @@ export class Store implements IStore {
       }
       for (const message of messagesToSave) {
         await db.runAsync(
-          `INSERT OR REPLACE INTO messages (id, user_id, group_id, timestamp, 
+          `INSERT OR REPLACE INTO messages (id, user_id, group_id, timestamp, client_seq, client_timestamp,
           ciphertext, message_type, msg_nonce, sender_ephemeral_public_key, sym_key_encryption_nonce, sealed_symmetric_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             message.id,
             message.sender_id,
             message.group_id,
             message.timestamp,
+            message.client_seq ?? null,
+            message.client_timestamp ?? null,
             message.ciphertext,
             message.message_type,
             message.msg_nonce,
@@ -474,8 +500,8 @@ export class Store implements IStore {
     const db = await this.getDb();
     const result = await db.getAllAsync<MessageRow>(`
       SELECT m.id as message_id, m.group_id,
-            m.user_id, m.timestamp,
-            m.ciphertext, 
+            m.user_id, m.timestamp, m.client_seq, m.client_timestamp,
+            m.ciphertext,
             m.message_type,
             m.msg_nonce,
             m.sender_ephemeral_public_key,
@@ -489,6 +515,8 @@ export class Store implements IStore {
         group_id: row.group_id,
         sender_id: row.user_id,
         timestamp: row.timestamp,
+        client_seq: row.client_seq,
+        client_timestamp: row.client_timestamp,
         ciphertext: row.ciphertext,
         message_type: row.message_type,
         msg_nonce: row.msg_nonce,

@@ -51,8 +51,7 @@ const compareUint8Arrays = (
 
 export default function ChatBox({ group }: { group: Group }) {
   const { user } = useGlobalStore();
-  const { getMessagesForGroup, optimistic, getClientSeqForMessageId } =
-    useMessageStore();
+  const { getMessagesForGroup, optimistic } = useMessageStore();
   const groupMessages = useMemo(() => {
     return getMessagesForGroup(group.id);
   }, [getMessagesForGroup, group.id]);
@@ -178,16 +177,10 @@ export default function ChatBox({ group }: { group: Group }) {
         string | ImageMessageContent | null
       >();
 
-      // Annotate messages with clientSeq if known (preserve optimistic order)
-      const sortedMessages = [...groupMessages]
-        .map((m) => ({
-          ...m,
-          clientSeq: getClientSeqForMessageId(m.id),
-        }))
-        .sort(
-          (a, b) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
+      const sortedMessages = [...groupMessages].sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
 
       for (let i = 0; i < sortedMessages.length; i++) {
         const currentMsg = sortedMessages[i];
@@ -270,7 +263,8 @@ export default function ChatBox({ group }: { group: Group }) {
             content: decryptedContent,
             align: currentMsg.sender_id === user?.id ? "right" : "left",
             timestamp: currentMsg.timestamp,
-            clientSeq: (currentMsg as any).clientSeq,
+            client_seq: currentMsg.client_seq,
+            client_timestamp: currentMsg.client_timestamp,
           });
         } else if (decryptedContent) {
           const optimisticMessage = optimisticMessages.find(
@@ -295,7 +289,8 @@ export default function ChatBox({ group }: { group: Group }) {
             content: imageContent,
             align: currentMsg.sender_id === user?.id ? "right" : "left",
             timestamp: currentMsg.timestamp,
-            clientSeq: (currentMsg as any).clientSeq,
+            client_seq: currentMsg.client_seq,
+            client_timestamp: currentMsg.client_timestamp,
           });
         }
       }
@@ -325,18 +320,20 @@ export default function ChatBox({ group }: { group: Group }) {
       // Merge real and optimistic messages, then sort everything together
       // This prevents optimistic messages from being stuck at the end
       const allDisplayableItems = [...finalDisplayableItems, ...filteredOptimistic].sort((a, b) => {
-        const at = new Date(a.timestamp).getTime();
-        const bt = new Date(b.timestamp).getTime();
-        if (at !== bt) return at - bt;
-        const aSeq =
-          (a as any).clientSeq ??
-          getClientSeqForMessageId(a.id) ??
-          Number.MAX_SAFE_INTEGER;
-        const bSeq =
-          (b as any).clientSeq ??
-          getClientSeqForMessageId(b.id) ??
-          Number.MAX_SAFE_INTEGER;
-        if (aSeq !== bSeq) return aSeq - bSeq;
+        // 1. Primary: Use client_timestamp if available, fallback to server timestamp
+        const aTime = new Date((a as any).client_timestamp ?? a.timestamp).getTime();
+        const bTime = new Date((b as any).client_timestamp ?? b.timestamp).getTime();
+        if (aTime !== bTime) return aTime - bTime;
+
+        // 2. Secondary: clientSeq for same-timestamp messages
+        const aSeq = (a as any).clientSeq ?? (a as any).client_seq ?? null;
+        const bSeq = (b as any).clientSeq ?? (b as any).client_seq ?? null;
+
+        if (aSeq !== null && bSeq !== null) return aSeq - bSeq;
+        if (aSeq !== null) return 1; // a is newer
+        if (bSeq !== null) return -1; // b is newer
+
+        // 3. Tertiary: ID comparison (stable, deterministic)
         return a.id.localeCompare(b.id);
       });
 
@@ -346,7 +343,7 @@ export default function ChatBox({ group }: { group: Group }) {
       if (DEBUG.MESSAGE_FLOW && Math.abs(nextDisplayable.length - displayableLengthRef.current) > 5) {
         console.warn(`📊 [DISPLAY] Count changed from ${displayableLengthRef.current} to ${nextDisplayable.length}`, {
           rawGroupMsgs: groupMessages.length,
-          decryptedReal: sortedFinalItems.length,
+          decryptedReal: finalDisplayableItems.length,
           optimisticTotal: optimisticMessages.length,
           optimisticKept: filteredOptimistic.length,
           realIdCount: realIds.size,
@@ -405,7 +402,6 @@ export default function ChatBox({ group }: { group: Group }) {
     user?.id,
     optimisticMessages,
     group.id,
-    getClientSeqForMessageId,
   ]);
 
   const flatListProps = useMemo(
