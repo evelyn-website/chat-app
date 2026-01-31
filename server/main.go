@@ -4,6 +4,7 @@ import (
 	"chat-app-server/auth"
 	"chat-app-server/db"
 	"chat-app-server/images"
+	"chat-app-server/jobs"
 	"chat-app-server/router"
 	"chat-app-server/s3store"
 	"chat-app-server/server"
@@ -62,6 +63,10 @@ func main() {
 	wsHandler := ws.NewHandler(hub, db, ctx, connPool)
 	go hub.Run()
 
+	// Initialize and start job scheduler
+	scheduler := jobs.NewScheduler(db, ctx, connPool, RedisClient, ServerInstanceID)
+	go scheduler.Start()
+
 	api := server.NewAPI(db, ctx, connPool)
 
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -74,6 +79,7 @@ func main() {
 	imageHandler := images.NewImageHandler(store, db, ctx, connPool)
 
 	defer connPool.Close()
+	defer scheduler.Stop()
 
 	router.InitRouter(authHandler, wsHandler, api, imageHandler)
 	router.Start(":8080")
