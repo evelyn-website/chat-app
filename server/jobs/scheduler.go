@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bsm/redislock"
-	"github.com/go-co-op/gocron"
+	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -24,7 +24,10 @@ type Scheduler struct {
 // NewScheduler creates and initializes a new job scheduler
 func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.Pool, redisClient *redis.Client, serverID string) *Scheduler {
 	// Create gocron scheduler with UTC timezone
-	cronScheduler := gocron.NewScheduler(time.UTC)
+	cronScheduler, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
+	if err != nil {
+		log.Fatalf("Failed to create scheduler: %v", err)
+	}
 
 	// Create Redis locker for distributed locking
 	locker := redislock.New(redisClient)
@@ -53,9 +56,13 @@ func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.P
 // registerJob registers a single job with the scheduler
 func (s *Scheduler) registerJob(job Job) {
 	// Wrap job execution with distributed locking
-	_, err := s.cron.Cron(job.Schedule()).Do(func() {
-		s.executeWithLock(job)
-	})
+	_, err := s.cron.NewJob(
+		gocron.CronJob(job.Schedule(), false),
+		gocron.NewTask(func() {
+			s.executeWithLock(job)
+		}),
+		gocron.WithName(job.Name()),
+	)
 
 	if err != nil {
 		log.Printf("Scheduler %s: Error registering job '%s': %v", s.serverID, job.Name(), err)
@@ -86,7 +93,7 @@ func (s *Scheduler) executeWithLock(job Job) {
 
 	// Ensure lock is released
 	defer func() {
-		if err := lock.Release(s.ctx); err != nil {
+		if err := lock.Release(context.Background()); err != nil {
 			log.Printf("Scheduler %s: Error releasing lock for job '%s': %v", s.serverID, job.Name(), err)
 		}
 	}()
@@ -102,14 +109,16 @@ func (s *Scheduler) executeWithLock(job Job) {
 	log.Printf("Scheduler %s: Job '%s' completed successfully", s.serverID, job.Name())
 }
 
-// Start begins the scheduler (blocking call - run in goroutine)
+// Start begins the scheduler (non-blocking - safe to run in goroutine or main thread)
 func (s *Scheduler) Start() {
 	log.Printf("Scheduler %s: Starting job scheduler", s.serverID)
-	s.cron.StartBlocking()
+	s.cron.Start()
 }
 
 // Stop gracefully stops the scheduler
 func (s *Scheduler) Stop() {
 	log.Printf("Scheduler %s: Stopping job scheduler", s.serverID)
-	s.cron.Stop()
+	if err := s.cron.Shutdown(); err != nil {
+		log.Printf("Scheduler %s: Error stopping scheduler: %v", s.serverID, err)
+	}
 }
