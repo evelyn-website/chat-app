@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bsm/redislock"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,14 +16,14 @@ import (
 
 // Scheduler manages the lifecycle of all recurring jobs with distributed locking
 type Scheduler struct {
-	cron     *gocron.Scheduler
+	cron     gocron.Scheduler
 	locker   *redislock.Client
 	ctx      context.Context
 	serverID string
 }
 
 // NewScheduler creates and initializes a new job scheduler
-func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.Pool, redisClient *redis.Client, serverID string) *Scheduler {
+func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.Pool, redisClient *redis.Client, s3Client *s3.Client, s3Bucket string, serverID string) *Scheduler {
 	// Create gocron scheduler with UTC timezone
 	cronScheduler, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
 	if err != nil {
@@ -40,7 +41,7 @@ func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.P
 	}
 
 	// Create base job with dependencies
-	baseJob := NewBaseJob(dbQueries, redisClient, pgxPool, ctx)
+	baseJob := NewBaseJob(dbQueries, redisClient, pgxPool, s3Client, s3Bucket, ctx)
 
 	// Register all enabled jobs from registry
 	jobConfigs := GetJobConfigs(baseJob)

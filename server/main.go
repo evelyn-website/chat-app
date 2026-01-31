@@ -63,10 +63,6 @@ func main() {
 	wsHandler := ws.NewHandler(hub, db, ctx, connPool)
 	go hub.Run()
 
-	// Initialize and start job scheduler
-	scheduler := jobs.NewScheduler(db, ctx, connPool, RedisClient, ServerInstanceID)
-	go scheduler.Start()
-
 	api := server.NewAPI(db, ctx, connPool)
 
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -75,6 +71,10 @@ func main() {
 		os.Exit(1)
 	}
 	store := s3store.New(cfg, os.Getenv("S3_BUCKET"))
+
+	// Initialize and start job scheduler (after S3 store creation)
+	scheduler := jobs.NewScheduler(db, ctx, connPool, RedisClient, store.GetS3Client(), store.GetBucket(), ServerInstanceID)
+	go scheduler.Start()
 
 	imageHandler := images.NewImageHandler(store, db, ctx, connPool)
 
