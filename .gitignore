@@ -21,5 +21,6 @@ server/tmp/
 
 
 expo/ios
+expo/coverage/
 expo-env.d.ts
 # @end expo-cli

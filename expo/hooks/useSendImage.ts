@@ -13,7 +13,7 @@ import {
   base64ToUint8Array,
   uint8ArrayToBase64,
 } from "@/services/encryptionService";
-import { ImageMessageContent, RecipientDevicePublicKey } from "@/types/types";
+import { ImageMessageContent, MessageType, RecipientDevicePublicKey } from "@/types/types";
 import { processImage } from "@/services/imageService";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
 import { OptimisticMessageItem } from "@/components/ChatBox/types";
@@ -180,7 +180,7 @@ export const useSendImage = (): UseSendImageReturn => {
           plaintextPayload,
           groupId,
           recipientDevicePublicKeys,
-          "image"
+          MessageType.IMAGE
         );
         if (!rawMessagePayload) {
           throw new Error("Failed to encrypt the final image message payload.");
