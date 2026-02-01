@@ -36,6 +36,23 @@ jest.mock("../GroupAvatarEditable", () => "GroupAvatarEditable");
 const mockOpenURL = jest.fn(() => Promise.resolve());
 jest.spyOn(Linking, "openURL").mockImplementation(mockOpenURL);
 
+// Helper to safely mock Platform.OS (readonly property)
+const originalPlatformOS = Platform.OS;
+
+function setPlatformOS(os: typeof Platform.OS): void {
+  Object.defineProperty(Platform, "OS", {
+    get: () => os,
+    configurable: true,
+  });
+}
+
+function restorePlatformOS(): void {
+  Object.defineProperty(Platform, "OS", {
+    get: () => originalPlatformOS,
+    configurable: true,
+  });
+}
+
 function makeGroup(overrides: Partial<Group> = {}): Group {
   return {
     id: "group-1",
@@ -55,6 +72,10 @@ function makeGroup(overrides: Partial<Group> = {}): Group {
 describe("ChatSettingsMenu – location maps link", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    restorePlatformOS();
   });
 
   it("renders 'Not set' placeholder when location is null", () => {
@@ -85,7 +106,7 @@ describe("ChatSettingsMenu – location maps link", () => {
   });
 
   it("opens Apple Maps URL on iOS when location is tapped", () => {
-    Platform.OS = "ios";
+    setPlatformOS("ios");
     const location = "123 Main St, Springfield, IL";
     const group = makeGroup({ location });
     const { getByText } = render(
@@ -101,7 +122,7 @@ describe("ChatSettingsMenu – location maps link", () => {
   });
 
   it("opens Google Maps URL on Android when location is tapped", () => {
-    Platform.OS = "android";
+    setPlatformOS("android");
     const location = "456 Oak Ave, Chicago, IL";
     const group = makeGroup({ location });
     const { getByText } = render(
@@ -117,7 +138,7 @@ describe("ChatSettingsMenu – location maps link", () => {
   });
 
   it("correctly encodes special characters in the location URL", () => {
-    Platform.OS = "ios";
+    setPlatformOS("ios");
     const location = "Café & Bar, 789 Elm St #2, New York, NY 10001";
     const group = makeGroup({ location });
     const { getByText } = render(
