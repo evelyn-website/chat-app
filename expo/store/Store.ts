@@ -540,7 +540,7 @@ export class Store implements IStore {
       result?.map((row) => {
         let parsedGroupUsers;
         try {
-          parsedGroupUsers = JSON.parse(JSON.parse(row.group_users));
+          parsedGroupUsers = JSON.parse(row.group_users);
         } catch (e) {
           parsedGroupUsers = [];
         }
