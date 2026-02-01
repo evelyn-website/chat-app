@@ -15,7 +15,7 @@ import (
 
 // deleteS3ObjectsWithPrefix deletes all S3 objects with the given prefix, handling pagination
 // for buckets with more than 1000 objects. Returns the total number of objects deleted.
-func deleteS3ObjectsWithPrefix(ctx context.Context, s3Client *s3.Client, bucket, prefix, jobName string) (int, error) {
+func deleteS3ObjectsWithPrefix(ctx context.Context, s3Client *s3.Client, bucket, prefix, _jobName string) (int, error) {
 	var continuationToken *string
 	totalDeleted := 0
 
