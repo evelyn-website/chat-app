@@ -420,7 +420,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const getGroups = useCallback(async (): Promise<Group[]> => {
     return http
       .get(`${httpBaseURL}/get-groups`)
-      .then((response) => response.data)
+      .then((response) => response.data as Group[])
       .catch((error) => {
         if (!(error instanceof CanceledError)) {
           console.error("Error loading groups:", error);

@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -133,12 +134,12 @@ SELECT
     g.updated_at,
     (SELECT ug_check.admin FROM user_groups ug_check WHERE ug_check.group_id = g.id AND ug_check.user_id = $1) AS admin, -- Admin status of the requesting user for THIS group
     COALESCE(
-        (SELECT json_agg(jsonb_build_object('id', u.id, 'username', u.username, 'email', u.email, 'admin', ug.admin, 'invited_at', ug.created_at))::text
+        (SELECT json_agg(jsonb_build_object('id', u.id, 'username', u.username, 'email', u.email, 'admin', ug.admin, 'invited_at', ug.created_at))
          FROM users u
          JOIN user_groups ug ON u.id = ug.user_id
          WHERE ug.group_id = g.id),
-        '[]'::text
-    ) AS group_users
+        '[]'::json
+    )::json AS group_users
 FROM
     groups g
 WHERE
@@ -162,7 +163,7 @@ type GetGroupWithUsersByIDRow struct {
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
 	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
 	Admin       bool             `json:"admin"`
-	GroupUsers  interface{}      `json:"group_users"`
+	GroupUsers  json.RawMessage  `json:"group_users"`
 }
 
 func (q *Queries) GetGroupWithUsersByID(ctx context.Context, arg GetGroupWithUsersByIDParams) (GetGroupWithUsersByIDRow, error) {
@@ -187,7 +188,7 @@ func (q *Queries) GetGroupWithUsersByID(ctx context.Context, arg GetGroupWithUse
 
 const getGroupsForUser = `-- name: GetGroupsForUser :many
 SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, groups.updated_at,
-json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at))::text AS group_users 
+json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at)) AS group_users 
 FROM groups
 JOIN user_groups ug ON ug.group_id = groups.id
 JOIN users u ON u.id = ug.user_id
@@ -209,7 +210,7 @@ type GetGroupsForUserRow struct {
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
 	Admin       bool             `json:"admin"`
 	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
-	GroupUsers  string           `json:"group_users"`
+	GroupUsers  json.RawMessage  `json:"group_users"`
 }
 
 func (q *Queries) GetGroupsForUser(ctx context.Context, id uuid.UUID) ([]GetGroupsForUserRow, error) {

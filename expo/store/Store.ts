@@ -8,6 +8,7 @@ export class Store implements IStore {
   private initPromise: Promise<void>;
   // Promise-based lock to serialize transaction-based operations
   private transactionLock: Promise<void> = Promise.resolve();
+  private closed = false;
 
   constructor() {
     this.db = SQLite.openDatabaseSync("store.db");
@@ -301,7 +302,7 @@ export class Store implements IStore {
 
   private async getDb(): Promise<SQLite.SQLiteDatabase> {
     await this.initPromise;
-    if (!this.db) {
+    if (this.closed || !this.db) {
       throw new Error("Database not initialized or initialization failed.");
     }
     return this.db;
@@ -540,7 +541,7 @@ export class Store implements IStore {
       result?.map((row) => {
         let parsedGroupUsers;
         try {
-          parsedGroupUsers = JSON.parse(JSON.parse(row.group_users));
+          parsedGroupUsers = JSON.parse(row.group_users);
         } catch (e) {
           parsedGroupUsers = [];
         }
@@ -600,6 +601,7 @@ export class Store implements IStore {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     try {
       await this.initPromise;
       await this.transactionLock;

@@ -551,28 +551,9 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	var clientGroupUsers []ClientGroupUser
-	groupUsersStr, ok := fullGroupData.GroupUsers.(string)
-	if !ok {
+	if err := json.Unmarshal(fullGroupData.GroupUsers, &clientGroupUsers); err != nil {
 		log.Printf(
-			"Error: fullGroupData.GroupUsers is not type string as expected. Actual type: %T, value: %v for group %d",
-			fullGroupData.GroupUsers,
-			fullGroupData.GroupUsers,
-			groupID,
-		)
-		c.JSON(
-			http.StatusInternalServerError,
-			gin.H{"error": "Failed to process group user data (unexpected data type)"},
-		)
-		return
-	}
-
-	if err := json.Unmarshal(
-		[]byte(groupUsersStr),
-		&clientGroupUsers,
-	); err != nil {
-		log.Printf(
-			"Error unmarshalling group_users JSON string '%s' for group %d: %v",
-			groupUsersStr,
+			"Error unmarshalling group_users JSON for group %s: %v",
 			groupID,
 			err,
 		)
