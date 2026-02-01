@@ -24,3 +24,9 @@ sql:
               type: "UUID"
               pointer: true
             nullable: true
+
+          # json → json.RawMessage (serializes correctly without base64 encoding)
+          - db_type: json
+            go_type:
+              import: "encoding/json"
+              type: "RawMessage"
