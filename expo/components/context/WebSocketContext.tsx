@@ -1,7 +1,6 @@
 import {
   RawMessage,
   Group,
-  GroupUser,
   User,
   UpdateGroupParams,
   CreateGroupParams,
@@ -17,11 +16,6 @@ import React, {
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
 import { CanceledError } from "axios";
-
-/** Raw group shape from the server — group_users may arrive as a JSON string or array. */
-interface ServerGroup extends Omit<Group, "group_users"> {
-  group_users: string | GroupUser[];
-}
 
 interface WebSocketContextType {
   sendMessage: (packet: RawMessage) => void;
@@ -426,25 +420,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const getGroups = useCallback(async (): Promise<Group[]> => {
     return http
       .get(`${httpBaseURL}/get-groups`)
-      .then((response) => {
-        return (response.data as ServerGroup[]).map((group) => {
-          let groupUsers: GroupUser[];
-          try {
-            const parsed =
-              typeof group.group_users === "string"
-                ? JSON.parse(group.group_users)
-                : group.group_users;
-            groupUsers = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            console.error(
-              "Failed to parse group_users for group",
-              group.id
-            );
-            groupUsers = [];
-          }
-          return { ...group, group_users: groupUsers };
-        });
-      })
+      .then((response) => response.data as Group[])
       .catch((error) => {
         if (!(error instanceof CanceledError)) {
           console.error("Error loading groups:", error);

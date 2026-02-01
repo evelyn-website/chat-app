@@ -91,9 +91,7 @@ const ChatSettingsMenu = (props: {
       const allGroups = await getGroups();
       await store.saveGroups(allGroups);
 
-      // Load from store to get properly parsed data
-      const storedGroups = await store.loadGroups();
-      const latestVersionOfCurrentGroup = storedGroups.find(
+      const latestVersionOfCurrentGroup = allGroups.find(
         (g) => g.id === currentGroup.id
       );
 
