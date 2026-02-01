@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -38,15 +39,19 @@ type BaseJob struct {
 	db          *db.Queries
 	redisClient *redis.Client
 	pgxPool     *pgxpool.Pool
+	s3Client    *s3.Client
+	s3Bucket    string
 	ctx         context.Context
 }
 
 // NewBaseJob creates a new BaseJob with the provided dependencies
-func NewBaseJob(dbQueries *db.Queries, redisClient *redis.Client, pgxPool *pgxpool.Pool, ctx context.Context) BaseJob {
+func NewBaseJob(dbQueries *db.Queries, redisClient *redis.Client, pgxPool *pgxpool.Pool, s3Client *s3.Client, s3Bucket string, ctx context.Context) BaseJob {
 	return BaseJob{
 		db:          dbQueries,
 		redisClient: redisClient,
 		pgxPool:     pgxPool,
+		s3Client:    s3Client,
+		s3Bucket:    s3Bucket,
 		ctx:         ctx,
 	}
 }

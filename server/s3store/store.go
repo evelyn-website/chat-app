@@ -11,9 +11,12 @@ import (
 type Store interface {
 	PresignUpload(ctx context.Context, key string, expires time.Duration, contentLength int64) (string, error)
 	PresignDownload(ctx context.Context, key string, expires time.Duration) (string, error)
+	GetS3Client() *s3.Client
+	GetBucket() string
 }
 
 type s3Store struct {
+	client    *s3.Client
 	presigner *s3.PresignClient
 	bucket    string
 }
@@ -22,6 +25,7 @@ func New(cfg aws.Config, bucket string) Store {
 	client := s3.NewFromConfig(cfg)
 	presigner := s3.NewPresignClient(client)
 	return &s3Store{
+		client:    client,
 		presigner: presigner,
 		bucket:    bucket,
 	}
@@ -53,4 +57,12 @@ func (s *s3Store) PresignDownload(ctx context.Context, key string, expires time.
 		return "", err
 	}
 	return out.URL, nil
+}
+
+func (s *s3Store) GetS3Client() *s3.Client {
+	return s.client
+}
+
+func (s *s3Store) GetBucket() string {
+	return s.bucket
 }

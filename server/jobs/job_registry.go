@@ -30,14 +30,19 @@ func (c *JobConfig) IsEnabled() bool {
 }
 
 // GetJobConfigs returns all registered jobs with their configurations
-// Initially returns an empty slice - jobs will be added here as they are implemented
 func GetJobConfigs(baseJob BaseJob) []JobConfig {
 	return []JobConfig{
-		// Jobs will be added here as they are implemented
-		// Example:
-		// {
-		//     Job:     &DeleteExpiredReservationsJob{BaseJob: baseJob},
-		//     Enabled: true,
-		// },
+		{
+			Job:     &CleanupExpiredGroupsJob{BaseJob: baseJob},
+			Enabled: true,
+		},
+		{
+			Job:     &CleanupStaleReservationsJob{BaseJob: baseJob},
+			Enabled: true,
+		},
+		{
+			Job:     &CleanupStaleDeviceKeysJob{BaseJob: baseJob},
+			Enabled: true,
+		},
 	}
 }
