@@ -13,6 +13,50 @@ import (
 	"github.com/google/uuid"
 )
 
+// deleteS3ObjectsWithPrefix deletes all S3 objects with the given prefix, handling pagination
+// for buckets with more than 1000 objects. Returns the total number of objects deleted.
+func deleteS3ObjectsWithPrefix(ctx context.Context, s3Client *s3.Client, bucket, prefix, jobName string) (int, error) {
+	var continuationToken *string
+	totalDeleted := 0
+
+	for {
+		listOutput, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(bucket),
+			Prefix:            aws.String(prefix),
+			ContinuationToken: continuationToken,
+		})
+		if err != nil {
+			return totalDeleted, fmt.Errorf("failed to list S3 objects: %w", err)
+		}
+
+		if len(listOutput.Contents) == 0 {
+			break
+		}
+
+		var objectIds []types.ObjectIdentifier
+		for _, obj := range listOutput.Contents {
+			objectIds = append(objectIds, types.ObjectIdentifier{Key: obj.Key})
+		}
+
+		_, err = s3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(bucket),
+			Delete: &types.Delete{Objects: objectIds},
+		})
+		if err != nil {
+			return totalDeleted, fmt.Errorf("failed to delete S3 objects: %w", err)
+		}
+
+		totalDeleted += len(objectIds)
+
+		if !aws.ToBool(listOutput.IsTruncated) {
+			break
+		}
+		continuationToken = listOutput.NextContinuationToken
+	}
+
+	return totalDeleted, nil
+}
+
 // CleanupExpiredGroupsJob deletes groups that have passed their end_time
 type CleanupExpiredGroupsJob struct {
 	BaseJob
@@ -45,16 +89,18 @@ func (j *CleanupExpiredGroupsJob) Execute(ctx context.Context) error {
 	log.Printf("Job %s: Found %d expired groups to clean up", j.Name(), len(expiredGroups))
 
 	// Process each expired group
+	cleanedCount := 0
 	for _, group := range expiredGroups {
 		if err := j.cleanupGroup(ctx, group.ID); err != nil {
 			log.Printf("Job %s: Error cleaning up group %s: %v", j.Name(), group.ID, err)
 			// Continue with other groups even if one fails
 			continue
 		}
+		cleanedCount++
 		log.Printf("Job %s: Cleaned up group %s (ended %s)", j.Name(), group.ID, group.EndTime.Time.Format(time.RFC3339))
 	}
 
-	log.Printf("Job %s: Cleaned up %d expired groups", j.Name(), len(expiredGroups))
+	log.Printf("Job %s: Cleaned up %d/%d expired groups", j.Name(), cleanedCount, len(expiredGroups))
 	return nil
 }
 
@@ -105,39 +151,14 @@ func (j *CleanupExpiredGroupsJob) cleanupGroup(ctx context.Context, groupID uuid
 func (j *CleanupExpiredGroupsJob) deleteS3Objects(ctx context.Context, groupID uuid.UUID) error {
 	prefix := fmt.Sprintf("groups/%s/", groupID)
 
-	// List objects with the group's prefix
-	listOutput, err := j.s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(j.s3Bucket),
-		Prefix: aws.String(prefix),
-	})
+	deleted, err := deleteS3ObjectsWithPrefix(ctx, j.s3Client, j.s3Bucket, prefix, j.Name())
 	if err != nil {
-		return fmt.Errorf("failed to list S3 objects: %w", err)
+		return err
 	}
 
-	if len(listOutput.Contents) == 0 {
-		// No objects to delete
-		return nil
+	if deleted > 0 {
+		log.Printf("Job %s: Deleted %d S3 objects for group %s", j.Name(), deleted, groupID)
 	}
-
-	// Build delete request (up to 1000 objects per call)
-	var objectIds []types.ObjectIdentifier
-	for _, obj := range listOutput.Contents {
-		objectIds = append(objectIds, types.ObjectIdentifier{
-			Key: obj.Key,
-		})
-	}
-
-	_, err = j.s3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(j.s3Bucket),
-		Delete: &types.Delete{
-			Objects: objectIds,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to delete S3 objects: %w", err)
-	}
-
-	log.Printf("Job %s: Deleted %d S3 objects for group %s", j.Name(), len(objectIds), groupID)
 	return nil
 }
 
@@ -230,39 +251,14 @@ func (j *CleanupStaleReservationsJob) Execute(ctx context.Context) error {
 func (j *CleanupStaleReservationsJob) deleteS3Objects(ctx context.Context, groupID uuid.UUID) error {
 	prefix := fmt.Sprintf("groups/%s/", groupID)
 
-	// List objects with the group's prefix
-	listOutput, err := j.s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(j.s3Bucket),
-		Prefix: aws.String(prefix),
-	})
+	deleted, err := deleteS3ObjectsWithPrefix(ctx, j.s3Client, j.s3Bucket, prefix, j.Name())
 	if err != nil {
-		return fmt.Errorf("failed to list S3 objects: %w", err)
+		return err
 	}
 
-	if len(listOutput.Contents) == 0 {
-		// No objects to delete (common case - not all reservations have uploaded avatars)
-		return nil
+	if deleted > 0 {
+		log.Printf("Job %s: Deleted %d orphaned S3 objects for reservation %s", j.Name(), deleted, groupID)
 	}
-
-	// Build delete request
-	var objectIds []types.ObjectIdentifier
-	for _, obj := range listOutput.Contents {
-		objectIds = append(objectIds, types.ObjectIdentifier{
-			Key: obj.Key,
-		})
-	}
-
-	_, err = j.s3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(j.s3Bucket),
-		Delete: &types.Delete{
-			Objects: objectIds,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to delete S3 objects: %w", err)
-	}
-
-	log.Printf("Job %s: Deleted %d orphaned S3 objects for reservation %s", j.Name(), len(objectIds), groupID)
 	return nil
 }
 
