@@ -1,4 +1,4 @@
-import { Text, View, TextInput, Alert } from "react-native";
+import { Text, View, TextInput, Alert, Linking, Platform, TouchableOpacity } from "react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import type { Group, UpdateGroupParams, DateOptions } from "@/types/types";
 import UserList from "./UserList";
@@ -372,7 +372,30 @@ const ChatSettingsMenu = (props: {
               setEditableLocation,
               "Enter location (optional)"
             )
-          : renderDisplayField("Location", currentGroup.location)}
+          : (
+            <View className="mb-3">
+              <Text className="text-sm text-gray-400 mb-1">Location</Text>
+              {currentGroup.location ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    const url =
+                      Platform.OS === "ios"
+                        ? `https://maps.apple.com/?q=${encodeURIComponent(currentGroup.location!)}`
+                        : `https://maps.google.com/?q=${encodeURIComponent(currentGroup.location!)}`;
+                    Linking.openURL(url);
+                  }}
+                  className="flex-row items-center"
+                >
+                  <Ionicons name="location-outline" size={16} color="#60A5FA" className="mr-1" />
+                  <Text className="text-base text-blue-400">{currentGroup.location}</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text className="text-base text-gray-200">
+                  <Text className="italic text-gray-500">Not set</Text>
+                </Text>
+              )}
+            </View>
+          )}
       </View>
 
       {/* Event Schedule Card */}
