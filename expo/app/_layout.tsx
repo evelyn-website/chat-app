@@ -4,6 +4,7 @@ import { GlobalStoreProvider } from "@/components/context/GlobalStoreContext";
 import { Stack } from "expo-router";
 import { AuthUtilsProvider } from "@/components/context/AuthUtilsContext";
 import { MessageStoreProvider } from "@/components/context/MessageStoreContext";
+import { NotificationProvider } from "@/components/context/NotificationContext";
 
 import "../styles/global.css";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -17,13 +18,15 @@ export default function RootLayout() {
           <WebSocketProvider>
             <MessageStoreProvider>
               <AuthUtilsProvider>
-                <Stack>
-                  <Stack.Screen
-                    name="(auth)"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen name="(app)" options={{ headerShown: false }} />
-                </Stack>
+                <NotificationProvider>
+                  <Stack>
+                    <Stack.Screen
+                      name="(auth)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen name="(app)" options={{ headerShown: false }} />
+                  </Stack>
+                </NotificationProvider>
               </AuthUtilsProvider>
             </MessageStoreProvider>
           </WebSocketProvider>

@@ -308,6 +308,10 @@ export class Store implements IStore {
     return this.db;
   }
 
+  public isAvailable(): boolean {
+    return !this.closed && this.db !== null;
+  }
+
   /**
    * Executes a given operation within a database transaction, ensuring
    * that only one such operation runs at a time using a lock.
@@ -588,6 +592,9 @@ export class Store implements IStore {
   }
 
   async markGroupRead(groupId: string) {
+    if (!this.isAvailable()) {
+      return;
+    }
     const timestamp = new Date().toISOString();
     await this.performSerialTransaction((db) =>
       db.runAsync(

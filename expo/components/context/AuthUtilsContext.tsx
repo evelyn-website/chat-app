@@ -7,6 +7,7 @@ import { useGlobalStore } from "./GlobalStoreContext";
 import { useWebSocket } from "./WebSocketContext";
 import { router } from "expo-router";
 import { useMessageStore } from "./MessageStoreContext";
+import { clearPushTokenOnServer } from "@/services/notificationService";
 
 import * as deviceService from "@/services/deviceService";
 import * as encryptionService from "@/services/encryptionService";
@@ -166,6 +167,12 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
 
   const logout = useCallback(async () => {
     try {
+      // Clear push token BEFORE clearing JWT (request needs auth)
+      if (globalDeviceId) {
+        await clearPushTokenOnServer(globalDeviceId).catch((error) => {
+          console.error("Error clearing push token:", error);
+        });
+      }
       await clear("jwt");
       setUser(undefined);
       setDeviceId(undefined);
@@ -177,7 +184,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
     } finally {
       router.replace({ pathname: "/(auth)" });
     }
-  }, [setUser, setDeviceId, connected, disconnect]);
+  }, [setUser, setDeviceId, connected, disconnect, globalDeviceId]);
 
   return (
     <AuthUtilsContext.Provider value={{ whoami, login, logout, signup }}>

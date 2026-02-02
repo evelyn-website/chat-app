@@ -9,7 +9,24 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const clearDevicePushToken = `-- name: ClearDevicePushToken :exec
+UPDATE device_keys
+SET expo_push_token = NULL
+WHERE user_id = $1 AND device_identifier = $2
+`
+
+type ClearDevicePushTokenParams struct {
+	UserID           uuid.UUID `json:"user_id"`
+	DeviceIdentifier string    `json:"device_identifier"`
+}
+
+func (q *Queries) ClearDevicePushToken(ctx context.Context, arg ClearDevicePushTokenParams) error {
+	_, err := q.db.Exec(ctx, clearDevicePushToken, arg.UserID, arg.DeviceIdentifier)
+	return err
+}
 
 const deleteAllDeviceKeysForUser = `-- name: DeleteAllDeviceKeysForUser :exec
 DELETE FROM device_keys
@@ -37,7 +54,7 @@ func (q *Queries) DeleteDeviceKey(ctx context.Context, arg DeleteDeviceKeyParams
 }
 
 const getDeviceKeyByIdentifier = `-- name: GetDeviceKeyByIdentifier :one
-SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at FROM device_keys
+SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled FROM device_keys
 WHERE user_id = $1 AND device_identifier = $2
 LIMIT 1
 `
@@ -57,12 +74,14 @@ func (q *Queries) GetDeviceKeyByIdentifier(ctx context.Context, arg GetDeviceKey
 		&i.PublicKey,
 		&i.CreatedAt,
 		&i.LastSeenAt,
+		&i.ExpoPushToken,
+		&i.NotificationsEnabled,
 	)
 	return i, err
 }
 
 const getDeviceKeysForUser = `-- name: GetDeviceKeysForUser :many
-SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at FROM device_keys
+SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled FROM device_keys
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -83,7 +102,43 @@ func (q *Queries) GetDeviceKeysForUser(ctx context.Context, userID uuid.UUID) ([
 			&i.PublicKey,
 			&i.CreatedAt,
 			&i.LastSeenAt,
+			&i.ExpoPushToken,
+			&i.NotificationsEnabled,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPushTokensForUsers = `-- name: GetPushTokensForUsers :many
+SELECT user_id, device_identifier, expo_push_token
+FROM device_keys
+WHERE user_id = ANY($1::uuid[])
+  AND expo_push_token IS NOT NULL
+  AND notifications_enabled = true
+`
+
+type GetPushTokensForUsersRow struct {
+	UserID           uuid.UUID   `json:"user_id"`
+	DeviceIdentifier string      `json:"device_identifier"`
+	ExpoPushToken    pgtype.Text `json:"expo_push_token"`
+}
+
+func (q *Queries) GetPushTokensForUsers(ctx context.Context, dollar_1 []uuid.UUID) ([]GetPushTokensForUsersRow, error) {
+	rows, err := q.db.Query(ctx, getPushTokensForUsers, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPushTokensForUsersRow
+	for rows.Next() {
+		var i GetPushTokensForUsersRow
+		if err := rows.Scan(&i.UserID, &i.DeviceIdentifier, &i.ExpoPushToken); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -106,7 +161,7 @@ INSERT INTO device_keys (
 ON CONFLICT (user_id, device_identifier) DO UPDATE SET
     public_key = EXCLUDED.public_key,
     last_seen_at = now()
-RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at
+RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled
 `
 
 type RegisterDeviceKeyParams struct {
@@ -125,6 +180,8 @@ func (q *Queries) RegisterDeviceKey(ctx context.Context, arg RegisterDeviceKeyPa
 		&i.PublicKey,
 		&i.CreatedAt,
 		&i.LastSeenAt,
+		&i.ExpoPushToken,
+		&i.NotificationsEnabled,
 	)
 	return i, err
 }
@@ -143,4 +200,33 @@ type UpdateDeviceKeyLastSeenParams struct {
 func (q *Queries) UpdateDeviceKeyLastSeen(ctx context.Context, arg UpdateDeviceKeyLastSeenParams) error {
 	_, err := q.db.Exec(ctx, updateDeviceKeyLastSeen, arg.UserID, arg.DeviceIdentifier)
 	return err
+}
+
+const updateDevicePushToken = `-- name: UpdateDevicePushToken :one
+UPDATE device_keys
+SET expo_push_token = $3
+WHERE user_id = $1 AND device_identifier = $2
+RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled
+`
+
+type UpdateDevicePushTokenParams struct {
+	UserID           uuid.UUID   `json:"user_id"`
+	DeviceIdentifier string      `json:"device_identifier"`
+	ExpoPushToken    pgtype.Text `json:"expo_push_token"`
+}
+
+func (q *Queries) UpdateDevicePushToken(ctx context.Context, arg UpdateDevicePushTokenParams) (DeviceKey, error) {
+	row := q.db.QueryRow(ctx, updateDevicePushToken, arg.UserID, arg.DeviceIdentifier, arg.ExpoPushToken)
+	var i DeviceKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DeviceIdentifier,
+		&i.PublicKey,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ExpoPushToken,
+		&i.NotificationsEnabled,
+	)
+	return i, err
 }

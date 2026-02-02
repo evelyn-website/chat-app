@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"chat-app-server/db"
+	"chat-app-server/notifications"
 	"context"
 	"fmt"
 	"log"
@@ -323,5 +324,42 @@ func (j *CleanupStaleDeviceKeysJob) Execute(ctx context.Context) error {
 	}
 
 	log.Printf("Job %s: Deleted %d device keys, skipped %d (users with active groups)", j.Name(), deletedCount, skippedCount)
+	return nil
+}
+
+// ProcessPushReceiptsJob checks pending push notification receipts and removes invalid tokens
+type ProcessPushReceiptsJob struct {
+	BaseJob
+	notificationService *notifications.NotificationService
+}
+
+// NewProcessPushReceiptsJob creates a new ProcessPushReceiptsJob with the notification service
+func NewProcessPushReceiptsJob(baseJob BaseJob, notificationService *notifications.NotificationService) *ProcessPushReceiptsJob {
+	return &ProcessPushReceiptsJob{
+		BaseJob:             baseJob,
+		notificationService: notificationService,
+	}
+}
+
+func (j *ProcessPushReceiptsJob) Name() string {
+	return "process_push_receipts"
+}
+
+func (j *ProcessPushReceiptsJob) Schedule() string {
+	return "*/15 * * * *" // Every 15 minutes
+}
+
+func (j *ProcessPushReceiptsJob) LockTimeout() time.Duration {
+	return 5 * time.Minute
+}
+
+func (j *ProcessPushReceiptsJob) Execute(ctx context.Context) error {
+	log.Printf("Job %s: Starting push receipt processing", j.Name())
+
+	if err := j.notificationService.ProcessReceipts(ctx); err != nil {
+		return fmt.Errorf("failed to process push receipts: %w", err)
+	}
+
+	log.Printf("Job %s: Completed push receipt processing", j.Name())
 	return nil
 }

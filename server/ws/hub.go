@@ -2,6 +2,7 @@ package ws
 
 import (
 	"chat-app-server/db"
+	"chat-app-server/notifications"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -86,6 +87,7 @@ type Hub struct {
 	db                      *db.Queries
 	pgxPool                 *pgxpool.Pool
 	ctx                     context.Context
+	notificationService     *notifications.NotificationService
 }
 
 const (
@@ -105,6 +107,7 @@ func NewHub(
 	conn *pgxpool.Pool,
 	redisClient *redis.Client,
 	serverID string,
+	notificationService *notifications.NotificationService,
 ) *Hub {
 	hub := &Hub{
 		Clients:                 make(map[uuid.UUID]*Client),
@@ -122,6 +125,7 @@ func NewHub(
 		db:                      dbQueries,
 		pgxPool:                 conn,
 		ctx:                     ctx,
+		notificationService:     notificationService,
 	}
 
 	// Populate Redis from DB on startup
@@ -539,6 +543,33 @@ func (h *Hub) Run() {
 				log.Printf("Hub %s: Error publishing E2EE message to Redis PubSub channel %s: %v", h.serverID, channel, err)
 			} else {
 				log.Printf("Hub %s: Published E2EE message for group %s to Redis PubSub channel %s", h.serverID, message.GroupID.String(), channel)
+			}
+
+			// Send push notifications to offline users asynchronously
+			if h.notificationService != nil {
+				go func(msg *RawMessageE2EE) {
+					// Get group name from Redis
+					groupInfoKey := redisGroupInfoPrefix + msg.GroupID.String()
+					groupName, err := h.redisClient.HGet(h.ctx, groupInfoKey, "name").Result()
+					if err != nil {
+						groupName = "Group"
+					}
+
+					// Get sender's username from DB
+					senderName := "Someone"
+					if sender, err := h.db.GetUserById(h.ctx, msg.SenderID); err == nil {
+						senderName = sender.Username
+					}
+
+					h.notificationService.SendMessageNotification(
+						h.ctx,
+						msg.GroupID,
+						groupName,
+						msg.SenderID,
+						senderName,
+						"sent a message",
+					)
+				}(message)
 			}
 
 		case removeMsg := <-h.RemoveUserFromGroupChan:

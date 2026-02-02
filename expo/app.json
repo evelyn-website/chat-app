@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.evelynnelson.chatexpo",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -59,7 +60,8 @@
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos to your library.",
           "isAccessToAllPhotosSupported": true
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true

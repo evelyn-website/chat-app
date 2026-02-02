@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"chat-app-server/notifications"
 	"os"
 	"strings"
 )
@@ -29,9 +30,14 @@ func (c *JobConfig) IsEnabled() bool {
 	return true
 }
 
+// JobDependencies holds optional dependencies for jobs that need them
+type JobDependencies struct {
+	NotificationService *notifications.NotificationService
+}
+
 // GetJobConfigs returns all registered jobs with their configurations
-func GetJobConfigs(baseJob BaseJob) []JobConfig {
-	return []JobConfig{
+func GetJobConfigs(baseJob BaseJob, deps *JobDependencies) []JobConfig {
+	configs := []JobConfig{
 		{
 			Job:     &CleanupExpiredGroupsJob{BaseJob: baseJob},
 			Enabled: true,
@@ -45,4 +51,14 @@ func GetJobConfigs(baseJob BaseJob) []JobConfig {
 			Enabled: true,
 		},
 	}
+
+	// Add notification-related jobs if notification service is available
+	if deps != nil && deps.NotificationService != nil {
+		configs = append(configs, JobConfig{
+			Job:     NewProcessPushReceiptsJob(baseJob, deps.NotificationService),
+			Enabled: true,
+		})
+	}
+
+	return configs
 }
