@@ -13,6 +13,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
 import { CanceledError } from "axios";
@@ -32,11 +33,11 @@ interface WebSocketContextType {
     description?: string | null,
     location?: string | null,
     imageUrl?: string | null,
-    blurhash?: string | null
+    blurhash?: string | null,
   ) => Promise<Group | undefined>;
   updateGroup: (
     id: string,
-    updateParams: UpdateGroupParams
+    updateParams: UpdateGroupParams,
   ) => Promise<Group | undefined>;
   inviteUsersToGroup: (emails: string[], group_id: string) => void;
   removeUserFromGroup: (email: string, group_id: string) => void;
@@ -46,7 +47,7 @@ interface WebSocketContextType {
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
-  undefined
+  undefined,
 );
 
 const httpBaseURL = `${process.env.EXPO_PUBLIC_HOST}/ws`;
@@ -67,6 +68,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connected, setConnected] = useState(false);
   const messageHandlersRef = useRef<((packet: RawMessage) => void)[]>([]);
   const isReconnecting = useRef(false);
+  const appState = useRef(AppState.currentState);
 
   const createGroup = useCallback(
     async (
@@ -77,7 +79,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
       description?: string | null,
       location?: string | null,
       imageUrl?: string | null,
-      blurhash?: string | null
+      blurhash?: string | null,
     ): Promise<Group | undefined> => {
       const httpURL = `${httpBaseURL}/create-group`;
       const payload: CreateGroupParams = {
@@ -98,18 +100,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           return undefined;
         });
     },
-    []
+    [],
   );
 
   const updateGroup = useCallback(
     async (
       id: string,
-      updateParams: UpdateGroupParams
+      updateParams: UpdateGroupParams,
     ): Promise<Group | undefined> => {
       const httpURL = `${httpBaseURL}/update-group/${id}`;
       if (
         !Object.values(updateParams).some(
-          (value) => value !== undefined && value !== null
+          (value) => value !== undefined && value !== null,
         )
       ) {
         console.error("Invalid update input: No parameters provided.");
@@ -123,7 +125,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           return undefined;
         });
     },
-    []
+    [],
   );
 
   const establishConnection = useCallback((): Promise<void> => {
@@ -222,7 +224,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           ) {
             oldSocket.close(
               1000,
-              "Client cleanup: Starting new connection attempt"
+              "Client cleanup: Starting new connection attempt",
             );
           }
         }
@@ -260,16 +262,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                 preventRetries = true;
                 safeReject(
                   new Error(
-                    `Authentication failed: ${parsedData.error || "Unknown reason"}`
-                  )
+                    `Authentication failed: ${parsedData.error || "Unknown reason"}`,
+                  ),
                 );
                 socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
               } else {
                 preventRetries = true;
                 safeReject(
                   new Error(
-                    "Received unexpected message during authentication phase."
-                  )
+                    "Received unexpected message during authentication phase.",
+                  ),
                 );
               }
             } else {
@@ -289,19 +291,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
               } else if (parsedData.type && parsedData.type === "error") {
                 console.error(
                   "Received operational error from server:",
-                  parsedData.message
+                  parsedData.message,
                 );
               } else {
                 console.warn(
                   "Received non-message data or malformed E2EE packet after auth:",
-                  parsedData
+                  parsedData,
                 );
               }
             }
           } catch (error) {
             console.error(
               "Error parsing WebSocket message or in handler:",
-              error
+              error,
             );
           }
         };
@@ -332,8 +334,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
               promiseSettled = true;
               reject(
                 new Error(
-                  `WebSocket closed (Code: ${event.code}) before authentication completed.`
-                )
+                  `WebSocket closed (Code: ${event.code}) before authentication completed.`,
+                ),
               );
             }
             return;
@@ -344,10 +346,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
             const delay = Math.min(
               INITIAL_RETRY_DELAY * Math.pow(2, retryCount - 1) +
                 Math.random() * 1000,
-              MAX_RETRY_DELAY
+              MAX_RETRY_DELAY,
             );
             console.log(
-              `WebSocket closed unexpectedly. Retrying in ${delay.toFixed(0)}ms... (Attempt ${retryCount})`
+              `WebSocket closed unexpectedly. Retrying in ${delay.toFixed(0)}ms... (Attempt ${retryCount})`,
             );
             setTimeout(connect, delay);
           } else {
@@ -356,7 +358,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
             if (!promiseSettled) {
               promiseSettled = true;
               reject(
-                new Error("WebSocket connection failed after maximum retries")
+                new Error("WebSocket connection failed after maximum retries"),
               );
             }
           }
@@ -399,7 +401,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           console.error("Error inviting users:", error);
         });
     },
-    []
+    [],
   );
 
   const removeUserFromGroup = useCallback(
@@ -414,7 +416,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           console.error("Error removing user:", error);
         });
     },
-    []
+    [],
   );
 
   const getGroups = useCallback(async (): Promise<Group[]> => {
@@ -452,11 +454,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       } else {
         console.error(
-          "WebSocket is not connected or not authenticated. Message not sent."
+          "WebSocket is not connected or not authenticated. Message not sent.",
         );
       }
     },
-    [connected]
+    [connected],
   );
 
   const onMessage = useCallback((callback: (packet: RawMessage) => void) => {
@@ -468,10 +470,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const removeMessageHandler = useCallback(
     (callback: (packet: RawMessage) => void) => {
       messageHandlersRef.current = messageHandlersRef.current.filter(
-        (h) => h !== callback
+        (h) => h !== callback,
       );
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -487,6 +489,27 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
   }, []);
+
+  // Disconnect WebSocket when app goes to background
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (
+          appState.current === "active" &&
+          nextAppState.match(/inactive|background/)
+        ) {
+          console.log("App backgrounded, disconnecting WebSocket");
+          disconnect();
+        }
+        appState.current = nextAppState;
+      },
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [disconnect]);
 
   return (
     <WebSocketContext.Provider
