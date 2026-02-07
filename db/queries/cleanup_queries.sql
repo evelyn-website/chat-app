@@ -47,4 +47,5 @@ SELECT EXISTS (
     WHERE ug.user_id = $1
       AND g.end_time > NOW()
       AND ug.deleted_at IS NULL
+      AND g.deleted_at IS NULL
 ) AS has_active_groups;

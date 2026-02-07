@@ -18,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -235,15 +234,13 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 			Admin:   false,
 		})
 		if err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation
+			if errors.Is(err, pgx.ErrNoRows) { // User already active in group, ON CONFLICT DO NOTHING returned no rows
 				log.Printf("User %s already in group %s, skipping invite.", user.ID.String(), req.GroupID.String())
 				continue
-			} else {
-				log.Printf("Error inserting user_group for user %s, group %s: %v", user.ID.String(), req.GroupID.String(), err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add one or more users to the group"})
-				return
 			}
+			log.Printf("Error inserting user_group for user %s, group %s: %v", user.ID.String(), req.GroupID.String(), err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add one or more users to the group"})
+			return
 		}
 		successfulInvites = append(successfulInvites, userGroup)
 		invitedUserIDs = append(invitedUserIDs, user.ID)
