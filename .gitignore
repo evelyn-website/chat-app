@@ -10,6 +10,7 @@ npm-debug.*
 *.orig.*
 web-build/
 development-notes
+LOCAL_README.md
 *.env
 server/tmp/
 
