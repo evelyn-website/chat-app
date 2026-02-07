@@ -23,7 +23,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates and initializes a new job scheduler
-func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.Pool, redisClient *redis.Client, s3Client *s3.Client, s3Bucket string, serverID string) *Scheduler {
+func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.Pool, redisClient *redis.Client, s3Client *s3.Client, s3Bucket string, serverID string, deps *JobDependencies) *Scheduler {
 	// Create gocron scheduler with UTC timezone
 	cronScheduler, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
 	if err != nil {
@@ -44,7 +44,7 @@ func NewScheduler(dbQueries *db.Queries, ctx context.Context, pgxPool *pgxpool.P
 	baseJob := NewBaseJob(dbQueries, redisClient, pgxPool, s3Client, s3Bucket, ctx)
 
 	// Register all enabled jobs from registry
-	jobConfigs := GetJobConfigs(baseJob)
+	jobConfigs := GetJobConfigs(baseJob, deps)
 	for _, config := range jobConfigs {
 		if config.IsEnabled() {
 			scheduler.registerJob(config.Job)

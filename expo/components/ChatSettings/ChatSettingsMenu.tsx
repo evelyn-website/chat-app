@@ -402,7 +402,7 @@ const ChatSettingsMenu = (props: {
       <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
         <View className="flex-row justify-between items-center mb-3">
           <Text className="text-lg font-semibold text-blue-400">
-            Event Schedule *
+            Event Schedule{isEditing && currentUserIsAdmin ? " *" : ""}
           </Text>
         </View>
         {isEditing && currentUserIsAdmin ? (

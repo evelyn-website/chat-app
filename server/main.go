@@ -5,6 +5,7 @@ import (
 	"chat-app-server/db"
 	"chat-app-server/images"
 	"chat-app-server/jobs"
+	"chat-app-server/notifications"
 	"chat-app-server/router"
 	"chat-app-server/s3store"
 	"chat-app-server/server"
@@ -59,7 +60,12 @@ func main() {
 	db := db.New(connPool)
 
 	authHandler := auth.NewAuthHandler(db, ctx, connPool)
-	hub := ws.NewHub(db, ctx, connPool, RedisClient, ServerInstanceID)
+
+	// Initialize notification service
+	notificationService := notifications.NewNotificationService(db, RedisClient)
+	notificationHandler := notifications.NewNotificationHandler(db)
+
+	hub := ws.NewHub(db, ctx, connPool, RedisClient, ServerInstanceID, notificationService)
 	wsHandler := ws.NewHandler(hub, db, ctx, connPool)
 	go hub.Run()
 
@@ -73,7 +79,10 @@ func main() {
 	store := s3store.New(cfg, os.Getenv("S3_BUCKET"))
 
 	// Initialize and start job scheduler (after S3 store creation)
-	scheduler := jobs.NewScheduler(db, ctx, connPool, RedisClient, store.GetS3Client(), store.GetBucket(), ServerInstanceID)
+	jobDeps := &jobs.JobDependencies{
+		NotificationService: notificationService,
+	}
+	scheduler := jobs.NewScheduler(db, ctx, connPool, RedisClient, store.GetS3Client(), store.GetBucket(), ServerInstanceID, jobDeps)
 	go scheduler.Start()
 
 	imageHandler := images.NewImageHandler(store, db, ctx, connPool)
@@ -81,7 +90,7 @@ func main() {
 	defer connPool.Close()
 	defer scheduler.Stop()
 
-	router.InitRouter(authHandler, wsHandler, api, imageHandler)
+	router.InitRouter(authHandler, wsHandler, api, imageHandler, notificationHandler)
 	router.Start(":8080")
 
 }

@@ -61,9 +61,11 @@ type DeviceKey struct {
 	// Client-generated unique identifier for the device
 	DeviceIdentifier string `json:"device_identifier"`
 	// Curve25519 public key bytes for E2EE
-	PublicKey  []byte           `json:"public_key"`
-	CreatedAt  pgtype.Timestamp `json:"created_at"`
-	LastSeenAt pgtype.Timestamp `json:"last_seen_at"`
+	PublicKey            []byte           `json:"public_key"`
+	CreatedAt            pgtype.Timestamp `json:"created_at"`
+	LastSeenAt           pgtype.Timestamp `json:"last_seen_at"`
+	ExpoPushToken        pgtype.Text      `json:"expo_push_token"`
+	NotificationsEnabled bool             `json:"notifications_enabled"`
 }
 
 type Group struct {
@@ -98,6 +100,13 @@ type Message struct {
 	// JSON array of per-recipient sealed symmetric keys. Each element: {deviceId, ephPubKey, keyNonce, sealedKey}
 	KeyEnvelopes []byte      `json:"key_envelopes"`
 	MessageType  MessageType `json:"message_type"`
+}
+
+type PushReceipt struct {
+	ID        uuid.UUID        `json:"id"`
+	TicketID  string           `json:"ticket_id"`
+	PushToken string           `json:"push_token"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
 type User struct {

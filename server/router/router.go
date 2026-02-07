@@ -3,6 +3,7 @@ package router
 import (
 	"chat-app-server/auth"
 	"chat-app-server/images"
+	"chat-app-server/notifications"
 	"chat-app-server/server"
 	"chat-app-server/ws"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 var r *gin.Engine
 
-func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *server.API, imageHandler *images.ImageHandler) {
+func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *server.API, imageHandler *images.ImageHandler, notificationHandler *notifications.NotificationHandler) {
 	r = gin.Default()
 
 	r.Use(cors.New(cors.Config{
@@ -34,8 +35,12 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 
 	apiRoutes.GET("/users/whoami", api.WhoAmI)
 	apiRoutes.GET("/users/device-keys", api.GetRelevantDeviceKeys)
-	
+
 	apiRoutes.POST("/groups/reserve/:groupID", api.ReserveGroup)
+
+	// Notification routes
+	apiRoutes.POST("/notifications/register-token", notificationHandler.RegisterPushToken)
+	apiRoutes.DELETE("/notifications/token", notificationHandler.ClearPushToken)
 
 	// auth routes group
 	authRoutes := r.Group("/auth/")

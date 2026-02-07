@@ -59,7 +59,13 @@ const GroupPage = () => {
 
   // Mark group as read when it's successfully loaded (only once per group)
   useEffect(() => {
-    if (currentGroup && id && store && markedAsReadRef.current !== id) {
+    if (
+      currentGroup &&
+      id &&
+      store &&
+      store.isAvailable() &&
+      markedAsReadRef.current !== id
+    ) {
       markedAsReadRef.current = id;
       store
         .markGroupRead(id)
@@ -75,7 +81,7 @@ const GroupPage = () => {
   // Mark as read when leaving the group (component unmount or group change)
   useEffect(() => {
     return () => {
-      if (id && store) {
+      if (id && store && store.isAvailable()) {
         store
           .markGroupRead(id)
           .then(() => {
