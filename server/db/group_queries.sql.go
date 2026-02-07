@@ -14,8 +14,8 @@ import (
 )
 
 const deleteGroup = `-- name: DeleteGroup :one
-DELETE FROM groups
-WHERE id = $1 RETURNING "id", "name", "created_at", "updated_at"
+UPDATE groups SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL
+RETURNING "id", "name", "created_at", "updated_at"
 `
 
 type DeleteGroupRow struct {
@@ -38,7 +38,7 @@ func (q *Queries) DeleteGroup(ctx context.Context, id uuid.UUID) (DeleteGroupRow
 }
 
 const getAllGroups = `-- name: GetAllGroups :many
-SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_time", "end_time", "created_at", "updated_at" FROM groups
+SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_time", "end_time", "created_at", "updated_at" FROM groups WHERE deleted_at IS NULL
 `
 
 type GetAllGroupsRow struct {
@@ -86,7 +86,7 @@ func (q *Queries) GetAllGroups(ctx context.Context) ([]GetAllGroupsRow, error) {
 }
 
 const getGroupById = `-- name: GetGroupById :one
-SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_time", "end_time", "created_at", "updated_at" FROM groups WHERE id = $1
+SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_time", "end_time", "created_at", "updated_at" FROM groups WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetGroupByIdRow struct {
@@ -132,18 +132,18 @@ SELECT
     g.end_time,
     g.created_at,
     g.updated_at,
-    (SELECT ug_check.admin FROM user_groups ug_check WHERE ug_check.group_id = g.id AND ug_check.user_id = $1) AS admin, -- Admin status of the requesting user for THIS group
+    (SELECT ug_check.admin FROM user_groups ug_check WHERE ug_check.group_id = g.id AND ug_check.user_id = $1 AND ug_check.deleted_at IS NULL) AS admin, -- Admin status of the requesting user for THIS group
     COALESCE(
         (SELECT json_agg(jsonb_build_object('id', u.id, 'username', u.username, 'email', u.email, 'admin', ug.admin, 'invited_at', ug.created_at))
          FROM users u
          JOIN user_groups ug ON u.id = ug.user_id
-         WHERE ug.group_id = g.id),
+         WHERE ug.group_id = g.id AND ug.deleted_at IS NULL),
         '[]'::json
     )::json AS group_users
 FROM
     groups g
 WHERE
-    g.id = $2
+    g.id = $2 AND g.deleted_at IS NULL
 `
 
 type GetGroupWithUsersByIDParams struct {
@@ -188,13 +188,13 @@ func (q *Queries) GetGroupWithUsersByID(ctx context.Context, arg GetGroupWithUse
 
 const getGroupsForUser = `-- name: GetGroupsForUser :many
 SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, groups.updated_at,
-json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at)) AS group_users 
+json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at)) AS group_users
 FROM groups
 JOIN user_groups ug ON ug.group_id = groups.id
 JOIN users u ON u.id = ug.user_id
 JOIN user_groups ug2 ON ug2.group_id = groups.id
 JOIN users u2 ON u2.id = ug2.user_id
-WHERE u.id = $1
+WHERE u.id = $1 AND groups.deleted_at IS NULL AND ug.deleted_at IS NULL AND ug2.deleted_at IS NULL
 GROUP BY groups.id, ug.id, u.id
 `
 
@@ -247,7 +247,7 @@ func (q *Queries) GetGroupsForUser(ctx context.Context, id uuid.UUID) ([]GetGrou
 }
 
 const insertGroup = `-- name: InsertGroup :one
-INSERT INTO groups ("id", "name", "start_time", "end_time", "description", "location", "image_url", "blurhash") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, created_at, updated_at, start_time, end_time, description, location, image_url, blurhash
+INSERT INTO groups ("id", "name", "start_time", "end_time", "description", "location", "image_url", "blurhash") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, created_at, updated_at, start_time, end_time, description, location, image_url, blurhash, deleted_at
 `
 
 type InsertGroupParams struct {
@@ -284,6 +284,7 @@ func (q *Queries) InsertGroup(ctx context.Context, arg InsertGroupParams) (Group
 		&i.Location,
 		&i.ImageUrl,
 		&i.Blurhash,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -298,7 +299,7 @@ SET
     "location" = coalesce($6, "location"),
     "image_url" = coalesce($7, "image_url"),
     "blurhash" = coalesce($8, "blurhash")
-WHERE id = $1
+WHERE id = $1 AND deleted_at IS NULL
 RETURNING "id", "name", "start_time", "end_time", "description", "location", "image_url", "blurhash", "created_at", "updated_at"
 `
 

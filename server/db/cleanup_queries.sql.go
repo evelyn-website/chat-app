@@ -24,11 +24,11 @@ func (q *Queries) DeleteMessagesForGroup(ctx context.Context, groupID *uuid.UUID
 }
 
 const deleteUserGroupsForGroup = `-- name: DeleteUserGroupsForGroup :exec
-DELETE FROM user_groups
-WHERE group_id = $1
+UPDATE user_groups SET deleted_at = NOW()
+WHERE group_id = $1 AND deleted_at IS NULL
 `
 
-// Deletes all user_groups relationships for a specific group
+// Soft-deletes all user_groups relationships for a specific group
 func (q *Queries) DeleteUserGroupsForGroup(ctx context.Context, groupID *uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserGroupsForGroup, groupID)
 	return err
@@ -38,7 +38,7 @@ const getExpiredGroups = `-- name: GetExpiredGroups :many
 
 SELECT id, name, end_time
 FROM groups
-WHERE end_time < NOW()
+WHERE end_time < NOW() AND deleted_at IS NULL
 ORDER BY end_time ASC
 LIMIT $1
 `
@@ -144,6 +144,7 @@ SELECT EXISTS (
     JOIN groups g ON ug.group_id = g.id
     WHERE ug.user_id = $1
       AND g.end_time > NOW()
+      AND ug.deleted_at IS NULL
 ) AS has_active_groups
 `
 

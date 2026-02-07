@@ -4,7 +4,7 @@
 -- Returns groups that have passed their end_time
 SELECT id, name, end_time
 FROM groups
-WHERE end_time < NOW()
+WHERE end_time < NOW() AND deleted_at IS NULL
 ORDER BY end_time ASC
 LIMIT $1;
 
@@ -14,9 +14,9 @@ DELETE FROM messages
 WHERE group_id = $1;
 
 -- name: DeleteUserGroupsForGroup :exec
--- Deletes all user_groups relationships for a specific group
-DELETE FROM user_groups
-WHERE group_id = $1;
+-- Soft-deletes all user_groups relationships for a specific group
+UPDATE user_groups SET deleted_at = NOW()
+WHERE group_id = $1 AND deleted_at IS NULL;
 
 
 -- Cleanup Stale Reservations Queries
@@ -46,4 +46,5 @@ SELECT EXISTS (
     JOIN groups g ON ug.group_id = g.id
     WHERE ug.user_id = $1
       AND g.end_time > NOW()
+      AND ug.deleted_at IS NULL
 ) AS has_active_groups;

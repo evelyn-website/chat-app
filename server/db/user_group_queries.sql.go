@@ -13,8 +13,9 @@ import (
 )
 
 const deleteUserGroup = `-- name: DeleteUserGroup :one
-DELETE FROM user_groups
-WHERE user_id = $1 AND group_id = $2 RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at"
+UPDATE user_groups SET deleted_at = NOW()
+WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
+RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at"
 `
 
 type DeleteUserGroupParams struct {
@@ -46,7 +47,7 @@ func (q *Queries) DeleteUserGroup(ctx context.Context, arg DeleteUserGroupParams
 }
 
 const getAllUserGroups = `-- name: GetAllUserGroups :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups
+SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE deleted_at IS NULL
 `
 
 type GetAllUserGroupsRow struct {
@@ -86,7 +87,7 @@ func (q *Queries) GetAllUserGroups(ctx context.Context) ([]GetAllUserGroupsRow, 
 }
 
 const getAllUserGroupsForGroup = `-- name: GetAllUserGroupsForGroup :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 ORDER BY created_at ASC
+SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC
 `
 
 type GetAllUserGroupsForGroupRow struct {
@@ -126,7 +127,7 @@ func (q *Queries) GetAllUserGroupsForGroup(ctx context.Context, groupID *uuid.UU
 }
 
 const getAllUserGroupsForUser = `-- name: GetAllUserGroupsForUser :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1
+SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND deleted_at IS NULL
 `
 
 type GetAllUserGroupsForUserRow struct {
@@ -166,7 +167,7 @@ func (q *Queries) GetAllUserGroupsForUser(ctx context.Context, userID *uuid.UUID
 }
 
 const getUserGroupByGroupIDAndUserID = `-- name: GetUserGroupByGroupIDAndUserID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2
+SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
 `
 
 type GetUserGroupByGroupIDAndUserIDParams struct {
@@ -198,7 +199,7 @@ func (q *Queries) GetUserGroupByGroupIDAndUserID(ctx context.Context, arg GetUse
 }
 
 const getUserGroupByID = `-- name: GetUserGroupByID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE id = $1
+SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetUserGroupByIDRow struct {
@@ -225,11 +226,11 @@ func (q *Queries) GetUserGroupByID(ctx context.Context, id uuid.UUID) (GetUserGr
 }
 
 const insertUserGroup = `-- name: InsertUserGroup :one
-INSERT INTO user_groups 
-    ("user_id", "group_id", "admin") 
+INSERT INTO user_groups
+    ("user_id", "group_id", "admin")
 VALUES ($1, $2, $3)
-ON CONFLICT (user_id, group_id) DO NOTHING
-RETURNING id, user_id, group_id, created_at, updated_at, admin
+ON CONFLICT (user_id, group_id) WHERE deleted_at IS NULL DO NOTHING
+RETURNING id, user_id, group_id, created_at, updated_at, admin, deleted_at
 `
 
 type InsertUserGroupParams struct {
@@ -248,6 +249,7 @@ func (q *Queries) InsertUserGroup(ctx context.Context, arg InsertUserGroupParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Admin,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -256,7 +258,7 @@ const updateUserGroup = `-- name: UpdateUserGroup :one
 UPDATE user_groups
 SET
     "admin" = $3
-WHERE user_id = $1 AND group_id = $2
+WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
 RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at"
 `
 
