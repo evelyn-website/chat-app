@@ -521,8 +521,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const WATCHDOG_INTERVAL = 30_000;
     const intervalId = setInterval(() => {
-      // Skip watchdog while app is backgrounded
+      // Skip watchdog while app is backgrounded or after an explicit disconnect
       if (appState.current !== "active") return;
+      if (preventRetriesRef.current) return;
 
       const socket = socketRef.current;
       if (connected && (!socket || socket.readyState !== WebSocket.OPEN)) {
@@ -558,7 +559,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         // Network restored — debounce to avoid flapping during rapid transitions
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (!connected && !isReconnecting.current) {
+          if (!connected && !isReconnecting.current && !preventRetriesRef.current) {
             console.log("NetInfo: network restored, attempting reconnection");
             establishConnection().catch((err) =>
               console.error("NetInfo reconnection failed:", err),
