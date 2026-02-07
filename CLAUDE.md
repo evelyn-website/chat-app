@@ -29,7 +29,7 @@ docker compose logs -f go-server
 **Important: Auto-rebuild with Air**
 - The Go server runs in Docker with [Air](https://github.com/cosmtrek/air) for hot reloading
 - Code changes are automatically detected and the server rebuilds
-- **DO NOT** run `go build .` manually to verify changes
+- **DO NOT** run `go build`, `go vet`, or any Go compilation commands manually to verify changes
 - **Instead**, check `docker compose logs -f go-server` to verify the rebuild succeeded
 - Look for compilation errors or successful startup messages in the logs
 

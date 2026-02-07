@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearGroupImageUrl = `-- name: ClearGroupImageUrl :exec
+UPDATE groups SET image_url = NULL, blurhash = NULL WHERE id = $1
+`
+
+// Nulls out the image_url after S3 cleanup so the group isn't reprocessed
+func (q *Queries) ClearGroupImageUrl(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearGroupImageUrl, id)
+	return err
+}
+
 const deleteMessagesForGroup = `-- name: DeleteMessagesForGroup :exec
 DELETE FROM messages
 WHERE group_id = $1
@@ -24,11 +34,11 @@ func (q *Queries) DeleteMessagesForGroup(ctx context.Context, groupID *uuid.UUID
 }
 
 const deleteUserGroupsForGroup = `-- name: DeleteUserGroupsForGroup :exec
-DELETE FROM user_groups
-WHERE group_id = $1
+UPDATE user_groups SET deleted_at = NOW()
+WHERE group_id = $1 AND deleted_at IS NULL
 `
 
-// Deletes all user_groups relationships for a specific group
+// Soft-deletes all user_groups relationships for a specific group
 func (q *Queries) DeleteUserGroupsForGroup(ctx context.Context, groupID *uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserGroupsForGroup, groupID)
 	return err
@@ -38,7 +48,7 @@ const getExpiredGroups = `-- name: GetExpiredGroups :many
 
 SELECT id, name, end_time
 FROM groups
-WHERE end_time < NOW()
+WHERE end_time < NOW() AND deleted_at IS NULL
 ORDER BY end_time ASC
 LIMIT $1
 `
@@ -61,6 +71,45 @@ func (q *Queries) GetExpiredGroups(ctx context.Context, limit int32) ([]GetExpir
 	for rows.Next() {
 		var i GetExpiredGroupsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.EndTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSoftDeletedGroupsNeedingCleanup = `-- name: GetSoftDeletedGroupsNeedingCleanup :many
+SELECT g.id, g.name, g.deleted_at
+FROM groups g
+WHERE g.deleted_at IS NOT NULL
+  AND (
+    EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+    OR g.image_url IS NOT NULL
+  )
+ORDER BY g.deleted_at ASC
+LIMIT $1
+`
+
+type GetSoftDeletedGroupsNeedingCleanupRow struct {
+	ID        uuid.UUID        `json:"id"`
+	Name      string           `json:"name"`
+	DeletedAt pgtype.Timestamp `json:"deleted_at"`
+}
+
+// Returns soft-deleted groups that still have messages or S3 data to clean up
+func (q *Queries) GetSoftDeletedGroupsNeedingCleanup(ctx context.Context, limit int32) ([]GetSoftDeletedGroupsNeedingCleanupRow, error) {
+	rows, err := q.db.Query(ctx, getSoftDeletedGroupsNeedingCleanup, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSoftDeletedGroupsNeedingCleanupRow
+	for rows.Next() {
+		var i GetSoftDeletedGroupsNeedingCleanupRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.DeletedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -144,6 +193,8 @@ SELECT EXISTS (
     JOIN groups g ON ug.group_id = g.id
     WHERE ug.user_id = $1
       AND g.end_time > NOW()
+      AND ug.deleted_at IS NULL
+      AND g.deleted_at IS NULL
 ) AS has_active_groups
 `
 

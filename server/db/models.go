@@ -79,6 +79,7 @@ type Group struct {
 	Location    pgtype.Text      `json:"location"`
 	ImageUrl    pgtype.Text      `json:"image_url"`
 	Blurhash    pgtype.Text      `json:"blurhash"`
+	DeletedAt   pgtype.Timestamp `json:"deleted_at"`
 }
 
 type GroupReservation struct {
@@ -125,4 +126,5 @@ type UserGroup struct {
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 	Admin     bool             `json:"admin"`
+	DeletedAt pgtype.Timestamp `json:"deleted_at"`
 }

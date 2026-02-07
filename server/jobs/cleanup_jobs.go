@@ -84,24 +84,45 @@ func (j *CleanupExpiredGroupsJob) Execute(ctx context.Context) error {
 
 	if len(expiredGroups) == 0 {
 		log.Printf("Job %s: No expired groups found", j.Name())
-		return nil
-	}
+	} else {
+		log.Printf("Job %s: Found %d expired groups to clean up", j.Name(), len(expiredGroups))
 
-	log.Printf("Job %s: Found %d expired groups to clean up", j.Name(), len(expiredGroups))
-
-	// Process each expired group
-	cleanedCount := 0
-	for _, group := range expiredGroups {
-		if err := j.cleanupGroup(ctx, group.ID); err != nil {
-			log.Printf("Job %s: Error cleaning up group %s: %v", j.Name(), group.ID, err)
-			// Continue with other groups even if one fails
-			continue
+		// Process each expired group
+		cleanedCount := 0
+		for _, group := range expiredGroups {
+			if err := j.cleanupGroup(ctx, group.ID); err != nil {
+				log.Printf("Job %s: Error cleaning up group %s: %v", j.Name(), group.ID, err)
+				// Continue with other groups even if one fails
+				continue
+			}
+			cleanedCount++
+			log.Printf("Job %s: Cleaned up group %s (ended %s)", j.Name(), group.ID, group.EndTime.Time.Format(time.RFC3339))
 		}
-		cleanedCount++
-		log.Printf("Job %s: Cleaned up group %s (ended %s)", j.Name(), group.ID, group.EndTime.Time.Format(time.RFC3339))
+
+		log.Printf("Job %s: Cleaned up %d/%d expired groups", j.Name(), cleanedCount, len(expiredGroups))
 	}
 
-	log.Printf("Job %s: Cleaned up %d/%d expired groups", j.Name(), cleanedCount, len(expiredGroups))
+	// Clean up soft-deleted groups that still have orphaned messages/S3 data
+	// (e.g. groups where the last user left before expiration)
+	softDeletedGroups, err := j.db.GetSoftDeletedGroupsNeedingCleanup(ctx, 50)
+	if err != nil {
+		return fmt.Errorf("failed to get soft-deleted groups needing cleanup: %w", err)
+	}
+
+	if len(softDeletedGroups) > 0 {
+		log.Printf("Job %s: Found %d soft-deleted groups with orphaned data", j.Name(), len(softDeletedGroups))
+		orphanCleaned := 0
+		for _, group := range softDeletedGroups {
+			if err := j.cleanupOrphanedGroupData(ctx, group.ID); err != nil {
+				log.Printf("Job %s: Error cleaning orphaned data for group %s: %v", j.Name(), group.ID, err)
+				continue
+			}
+			orphanCleaned++
+			log.Printf("Job %s: Cleaned orphaned data for soft-deleted group %s", j.Name(), group.ID)
+		}
+		log.Printf("Job %s: Cleaned orphaned data for %d/%d soft-deleted groups", j.Name(), orphanCleaned, len(softDeletedGroups))
+	}
+
 	return nil
 }
 
@@ -144,6 +165,31 @@ func (j *CleanupExpiredGroupsJob) cleanupGroup(ctx context.Context, groupID uuid
 	if err := j.cleanupRedisKeys(ctx, groupID); err != nil {
 		log.Printf("Job %s: Warning - failed to cleanup Redis keys for group %s: %v", j.Name(), groupID, err)
 		// Don't return error - Redis cleanup is best-effort
+	}
+
+	return nil
+}
+
+func (j *CleanupExpiredGroupsJob) cleanupOrphanedGroupData(ctx context.Context, groupID uuid.UUID) error {
+	// Delete S3 objects first — if this fails, return early so the group is
+	// retried next run (messages/image_url still present keep it in the query)
+	if err := j.deleteS3Objects(ctx, groupID); err != nil {
+		return fmt.Errorf("failed to delete S3 objects for soft-deleted group: %w", err)
+	}
+
+	// Delete orphaned messages
+	if err := j.db.DeleteMessagesForGroup(ctx, &groupID); err != nil {
+		return fmt.Errorf("failed to delete messages for soft-deleted group: %w", err)
+	}
+
+	// Clear image_url so this group isn't picked up again
+	if err := j.db.ClearGroupImageUrl(ctx, groupID); err != nil {
+		return fmt.Errorf("failed to clear image_url for soft-deleted group: %w", err)
+	}
+
+	// Best-effort Redis cleanup (may already be cleaned by LeaveGroup)
+	if err := j.cleanupRedisKeys(ctx, groupID); err != nil {
+		log.Printf("Job %s: Warning - failed to cleanup Redis keys for soft-deleted group %s: %v", j.Name(), groupID, err)
 	}
 
 	return nil
