@@ -25,7 +25,7 @@ interface NotificationContextType {
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -33,8 +33,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const { user, deviceId } = useGlobalStore();
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const notificationListener = useRef<Notifications.EventSubscription>();
-  const responseListener = useRef<Notifications.EventSubscription>();
+  const notificationListener = useRef<Notifications.EventSubscription>(undefined);
+  const responseListener = useRef<Notifications.EventSubscription>(undefined);
   const appState = useRef(AppState.currentState);
 
   const registerPushNotifications = useCallback(async () => {
@@ -69,6 +69,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   // Register for push notifications when user logs in
   useEffect(() => {
     if (user && deviceId) {
+      // Clear all delivered notifications on app launch
+      Notifications.dismissAllNotificationsAsync();
+      Notifications.setBadgeCountAsync(0);
       registerPushNotifications();
     }
   }, [user, deviceId, registerPushNotifications]);
@@ -82,13 +85,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
           appState.current.match(/inactive|background/) &&
           nextAppState === "active"
         ) {
-          // App has come to the foreground
+          // App has come to the foreground — clear all delivered notifications
+          Notifications.dismissAllNotificationsAsync();
+          Notifications.setBadgeCountAsync(0);
+
           if (user && deviceId) {
             registerPushNotifications();
           }
         }
         appState.current = nextAppState;
-      }
+      },
     );
 
     return () => {
@@ -102,7 +108,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     notificationListener.current = addNotificationReceivedListener(
       (notification) => {
         console.log("Notification received in foreground:", notification);
-      }
+      },
     );
 
     // Handle notification taps (when user interacts with notification)
@@ -118,7 +124,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
             params: { id: groupId },
           });
         }
-      }
+      },
     );
 
     return () => {
@@ -148,7 +154,7 @@ export const useNotifications = () => {
   const context = useContext(NotificationContext);
   if (!context) {
     throw new Error(
-      "useNotifications must be used within a NotificationProvider"
+      "useNotifications must be used within a NotificationProvider",
     );
   }
   return context;
