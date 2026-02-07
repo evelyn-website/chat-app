@@ -117,13 +117,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
         const data = response.notification.request.content.data;
         const groupId = data?.groupId as string | undefined;
 
-        if (groupId) {
-          // Navigate to the group chat
-          router.push({
-            pathname: "/(app)/groups/[id]",
-            params: { id: groupId },
-          });
+        if (!user || !groupId) {
+          return;
         }
+
+        // Navigate to the group chat
+        router.push({
+          pathname: "/(app)/groups/[id]",
+          params: { id: groupId },
+        });
       },
     );
 
@@ -135,7 +137,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
         responseListener.current.remove();
       }
     };
-  }, []);
+  }, [user]);
 
   return (
     <NotificationContext.Provider
