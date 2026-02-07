@@ -63,7 +63,7 @@ func main() {
 
 	// Initialize notification service
 	notificationService := notifications.NewNotificationService(db, RedisClient)
-	notificationHandler := notifications.NewNotificationHandler(db, ctx)
+	notificationHandler := notifications.NewNotificationHandler(db)
 
 	hub := ws.NewHub(db, ctx, connPool, RedisClient, ServerInstanceID, notificationService)
 	wsHandler := ws.NewHandler(hub, db, ctx, connPool)

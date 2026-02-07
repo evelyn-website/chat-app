@@ -3,12 +3,14 @@ package notifications
 import (
 	"bytes"
 	"chat-app-server/db"
+	"chat-app-server/rediskeys"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
+	"time"
 
 	expo "github.com/oliveroneill/exponent-server-sdk-golang/sdk"
 
@@ -18,8 +20,8 @@ import (
 )
 
 const (
-	redisClientServerPrefix = "client:"
-	redisGroupMembersPrefix = "group:"
+	redisClientServerPrefix = rediskeys.ClientServerPrefix
+	redisGroupMembersPrefix = rediskeys.GroupMembersPrefix
 
 	// Expo API allows up to 100 notifications per request
 	maxBatchSize = 100
@@ -45,7 +47,7 @@ func NewNotificationService(dbQueries *db.Queries, redisClient *redis.Client) *N
 		client:      expo.NewPushClient(nil),
 		db:          dbQueries,
 		redisClient: redisClient,
-		httpClient:  &http.Client{},
+		httpClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

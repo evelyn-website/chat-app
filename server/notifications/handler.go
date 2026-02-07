@@ -3,7 +3,6 @@ package notifications
 import (
 	"chat-app-server/db"
 	"chat-app-server/util"
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,15 +11,13 @@ import (
 
 // NotificationHandler handles push notification related HTTP requests
 type NotificationHandler struct {
-	db  *db.Queries
-	ctx context.Context
+	db *db.Queries
 }
 
 // NewNotificationHandler creates a new notification handler
-func NewNotificationHandler(dbQueries *db.Queries, ctx context.Context) *NotificationHandler {
+func NewNotificationHandler(dbQueries *db.Queries) *NotificationHandler {
 	return &NotificationHandler{
-		db:  dbQueries,
-		ctx: ctx,
+		db: dbQueries,
 	}
 }
 

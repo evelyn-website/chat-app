@@ -3,6 +3,7 @@ package ws
 import (
 	"chat-app-server/db"
 	"chat-app-server/notifications"
+	"chat-app-server/rediskeys"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -91,14 +92,14 @@ type Hub struct {
 }
 
 const (
-	redisClientServerPrefix  = "client:"
-	redisServerClientsPrefix = "server:"
-	redisUserGroupsPrefix    = "user:"
-	redisGroupMembersPrefix  = "group:"
-	redisGroupInfoPrefix     = "groupinfo:"
+	redisClientServerPrefix  = rediskeys.ClientServerPrefix
+	redisServerClientsPrefix = rediskeys.ServerClientsPrefix
+	redisUserGroupsPrefix    = rediskeys.UserGroupsPrefix
+	redisGroupMembersPrefix  = rediskeys.GroupMembersPrefix
+	redisGroupInfoPrefix     = rediskeys.GroupInfoPrefix
 
-	pubSubGroupMessagesChannel = "group_messages"
-	pubSubGroupEventsChannel   = "group_events"
+	pubSubGroupMessagesChannel = rediskeys.PubSubGroupMessagesChannel
+	pubSubGroupEventsChannel   = rediskeys.PubSubGroupEventsChannel
 )
 
 func NewHub(

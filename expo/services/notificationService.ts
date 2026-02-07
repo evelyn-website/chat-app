@@ -51,7 +51,6 @@ export async function registerForPushNotificationsAsync(): Promise<
       projectId,
     });
     const token = tokenResponse.data;
-    console.log("Expo push token:", token);
 
     // Configure Android channel
     if (Platform.OS === "android") {

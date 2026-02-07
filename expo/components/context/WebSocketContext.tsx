@@ -490,17 +490,22 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  // Disconnect WebSocket when app goes to background
+  // Disconnect WebSocket when app goes to background, reconnect on foreground
   useEffect(() => {
     const subscription = AppState.addEventListener(
       "change",
       (nextAppState: AppStateStatus) => {
-        if (
-          appState.current === "active" &&
-          nextAppState.match(/inactive|background/)
-        ) {
+        if (nextAppState === "background") {
           console.log("App backgrounded, disconnecting WebSocket");
           disconnect();
+        } else if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === "active"
+        ) {
+          console.log("App foregrounded, reconnecting WebSocket");
+          establishConnection().catch((err) =>
+            console.error("Reconnection failed:", err),
+          );
         }
         appState.current = nextAppState;
       },
@@ -509,7 +514,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       subscription.remove();
     };
-  }, [disconnect]);
+  }, [disconnect, establishConnection]);
 
   return (
     <WebSocketContext.Provider
