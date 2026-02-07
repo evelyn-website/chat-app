@@ -29,5 +29,11 @@ jest.mock('react-native-get-random-values', () => ({
   }),
 }));
 
+// Mock @react-native-community/netinfo (native module used by WebSocketContext)
+jest.mock('@react-native-community/netinfo', () => ({
+  addEventListener: jest.fn(() => jest.fn()),
+  fetch: jest.fn().mockResolvedValue({ isConnected: true, isInternetReachable: true }),
+}));
+
 // Set up global test timeout
 jest.setTimeout(10000);
