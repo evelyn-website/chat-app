@@ -104,7 +104,7 @@ func (j *CleanupExpiredGroupsJob) Execute(ctx context.Context) error {
 
 	// Clean up soft-deleted groups that still have orphaned messages/S3 data
 	// (e.g. groups where the last user left before expiration)
-	softDeletedGroups, err := j.db.GetSoftDeletedGroupsWithMessages(ctx, 50)
+	softDeletedGroups, err := j.db.GetSoftDeletedGroupsNeedingCleanup(ctx, 50)
 	if err != nil {
 		return fmt.Errorf("failed to get soft-deleted groups needing cleanup: %w", err)
 	}
@@ -171,14 +171,20 @@ func (j *CleanupExpiredGroupsJob) cleanupGroup(ctx context.Context, groupID uuid
 }
 
 func (j *CleanupExpiredGroupsJob) cleanupOrphanedGroupData(ctx context.Context, groupID uuid.UUID) error {
-	// Delete S3 objects
+	// Delete S3 objects first — if this fails, return early so the group is
+	// retried next run (messages/image_url still present keep it in the query)
 	if err := j.deleteS3Objects(ctx, groupID); err != nil {
-		log.Printf("Job %s: Warning - failed to delete S3 objects for soft-deleted group %s: %v", j.Name(), groupID, err)
+		return fmt.Errorf("failed to delete S3 objects for soft-deleted group: %w", err)
 	}
 
 	// Delete orphaned messages
 	if err := j.db.DeleteMessagesForGroup(ctx, &groupID); err != nil {
 		return fmt.Errorf("failed to delete messages for soft-deleted group: %w", err)
+	}
+
+	// Clear image_url so this group isn't picked up again
+	if err := j.db.ClearGroupImageUrl(ctx, groupID); err != nil {
+		return fmt.Errorf("failed to clear image_url for soft-deleted group: %w", err)
 	}
 
 	// Best-effort Redis cleanup (may already be cleaned by LeaveGroup)

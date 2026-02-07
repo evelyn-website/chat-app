@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearGroupImageUrl = `-- name: ClearGroupImageUrl :exec
+UPDATE groups SET image_url = NULL, blurhash = NULL WHERE id = $1
+`
+
+// Nulls out the image_url after S3 cleanup so the group isn't reprocessed
+func (q *Queries) ClearGroupImageUrl(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearGroupImageUrl, id)
+	return err
+}
+
 const deleteMessagesForGroup = `-- name: DeleteMessagesForGroup :exec
 DELETE FROM messages
 WHERE group_id = $1
@@ -71,31 +81,34 @@ func (q *Queries) GetExpiredGroups(ctx context.Context, limit int32) ([]GetExpir
 	return items, nil
 }
 
-const getSoftDeletedGroupsWithMessages = `-- name: GetSoftDeletedGroupsWithMessages :many
+const getSoftDeletedGroupsNeedingCleanup = `-- name: GetSoftDeletedGroupsNeedingCleanup :many
 SELECT g.id, g.name, g.deleted_at
 FROM groups g
 WHERE g.deleted_at IS NOT NULL
-  AND EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+  AND (
+    EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+    OR g.image_url IS NOT NULL
+  )
 ORDER BY g.deleted_at ASC
 LIMIT $1
 `
 
-type GetSoftDeletedGroupsWithMessagesRow struct {
+type GetSoftDeletedGroupsNeedingCleanupRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Name      string           `json:"name"`
 	DeletedAt pgtype.Timestamp `json:"deleted_at"`
 }
 
-// Returns soft-deleted groups that still have messages to clean up
-func (q *Queries) GetSoftDeletedGroupsWithMessages(ctx context.Context, limit int32) ([]GetSoftDeletedGroupsWithMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getSoftDeletedGroupsWithMessages, limit)
+// Returns soft-deleted groups that still have messages or S3 data to clean up
+func (q *Queries) GetSoftDeletedGroupsNeedingCleanup(ctx context.Context, limit int32) ([]GetSoftDeletedGroupsNeedingCleanupRow, error) {
+	rows, err := q.db.Query(ctx, getSoftDeletedGroupsNeedingCleanup, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetSoftDeletedGroupsWithMessagesRow
+	var items []GetSoftDeletedGroupsNeedingCleanupRow
 	for rows.Next() {
-		var i GetSoftDeletedGroupsWithMessagesRow
+		var i GetSoftDeletedGroupsNeedingCleanupRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.DeletedAt); err != nil {
 			return nil, err
 		}

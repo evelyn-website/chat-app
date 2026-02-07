@@ -38,14 +38,21 @@ FROM device_keys
 WHERE last_seen_at < NOW() - INTERVAL '90 days'
 ORDER BY last_seen_at ASC;
 
--- name: GetSoftDeletedGroupsWithMessages :many
--- Returns soft-deleted groups that still have messages to clean up
+-- name: GetSoftDeletedGroupsNeedingCleanup :many
+-- Returns soft-deleted groups that still have messages or S3 data to clean up
 SELECT g.id, g.name, g.deleted_at
 FROM groups g
 WHERE g.deleted_at IS NOT NULL
-  AND EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+  AND (
+    EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+    OR g.image_url IS NOT NULL
+  )
 ORDER BY g.deleted_at ASC
 LIMIT $1;
+
+-- name: ClearGroupImageUrl :exec
+-- Nulls out the image_url after S3 cleanup so the group isn't reprocessed
+UPDATE groups SET image_url = NULL, blurhash = NULL WHERE id = $1;
 
 -- name: UserHasActiveGroups :one
 -- Checks if user is in any groups that haven't expired yet
