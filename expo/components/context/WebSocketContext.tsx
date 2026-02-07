@@ -14,6 +14,7 @@ import React, {
   useState,
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
 import { CanceledError } from "axios";
@@ -59,7 +60,6 @@ const MAX_RETRY_DELAY = 30000;
 
 const CLOSE_CODE_AUTH_FAILED = 4001;
 const CLOSE_CODE_UNAUTHENTICATED = 4003;
-let preventRetries = false;
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -68,6 +68,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connected, setConnected] = useState(false);
   const messageHandlersRef = useRef<((packet: RawMessage) => void)[]>([]);
   const isReconnecting = useRef(false);
+  const preventRetriesRef = useRef(false);
   const appState = useRef(AppState.currentState);
 
   const createGroup = useCallback(
@@ -130,7 +131,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const establishConnection = useCallback((): Promise<void> => {
     let promiseSettled = false;
-    preventRetries = false;
+    preventRetriesRef.current = false;
     let currentAttemptPreventRetries = false;
 
     return new Promise(async (resolve, reject) => {
@@ -201,7 +202,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
       };
 
       const connect = () => {
-        if (currentAttemptPreventRetries || preventRetries) {
+        if (currentAttemptPreventRetries || preventRetriesRef.current) {
           console.log("Retries prevented for current connection flow.");
           isReconnecting.current = false;
           if (!promiseSettled && !isAuthenticated) {
@@ -253,13 +254,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                 setConnected(true);
                 isReconnecting.current = false;
                 retryCount = 0;
-                preventRetries = false;
+                preventRetriesRef.current = false;
                 if (!promiseSettled) {
                   promiseSettled = true;
                   resolve();
                 }
               } else if (parsedData.type === "auth_failure") {
-                preventRetries = true;
+                preventRetriesRef.current = true;
                 safeReject(
                   new Error(
                     `Authentication failed: ${parsedData.error || "Unknown reason"}`,
@@ -267,7 +268,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                 );
                 socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
               } else {
-                preventRetries = true;
+                preventRetriesRef.current = true;
                 safeReject(
                   new Error(
                     "Received unexpected message during authentication phase.",
@@ -324,7 +325,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
           if (
             currentAttemptPreventRetries ||
-            preventRetries ||
+            preventRetriesRef.current ||
             event.code === 1000 ||
             event.code === CLOSE_CODE_AUTH_FAILED ||
             event.code === CLOSE_CODE_UNAUTHENTICATED
@@ -382,7 +383,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const disconnect = useCallback(() => {
-    preventRetries = true;
+    preventRetriesRef.current = true;
     isReconnecting.current = false;
     if (socketRef.current) {
       socketRef.current.close(1000, "User initiated disconnect");
@@ -477,9 +478,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   useEffect(() => {
-    preventRetries = false;
+    preventRetriesRef.current = false;
     return () => {
-      preventRetries = true;
+      preventRetriesRef.current = true;
       isReconnecting.current = false;
       if (socketRef.current) {
         const wsToClose = socketRef.current;
@@ -515,6 +516,66 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
       subscription.remove();
     };
   }, [disconnect, establishConnection]);
+
+  // Watchdog: periodically verify connection health and recover from silent disconnects
+  useEffect(() => {
+    const WATCHDOG_INTERVAL = 30_000;
+    const intervalId = setInterval(() => {
+      // Skip watchdog while app is backgrounded or after an explicit disconnect
+      if (appState.current !== "active") return;
+      if (preventRetriesRef.current) return;
+
+      const socket = socketRef.current;
+      if (connected && (!socket || socket.readyState !== WebSocket.OPEN)) {
+        console.log("Watchdog: connected state is stale, resetting and reconnecting");
+        setConnected(false);
+        if (!isReconnecting.current) {
+          establishConnection().catch((err) =>
+            console.error("Watchdog reconnection failed:", err),
+          );
+        }
+      } else if (!connected && !isReconnecting.current) {
+        console.log("Watchdog: not connected, attempting reconnection");
+        establishConnection().catch((err) =>
+          console.error("Watchdog reconnection failed:", err),
+        );
+      }
+    }, WATCHDOG_INTERVAL);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [connected, establishConnection]);
+
+  // Reconnect on network restoration (e.g. WiFi/cellular switch, airplane mode off)
+  useEffect(() => {
+    const wasConnectedRef = { current: true };
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isNowConnected = !!state.isConnected;
+
+      if (!wasConnectedRef.current && isNowConnected) {
+        // Network restored — debounce to avoid flapping during rapid transitions
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (!connected && !isReconnecting.current && !preventRetriesRef.current) {
+            console.log("NetInfo: network restored, attempting reconnection");
+            establishConnection().catch((err) =>
+              console.error("NetInfo reconnection failed:", err),
+            );
+          }
+        }, 1500);
+      }
+
+      wasConnectedRef.current = isNowConnected;
+    });
+
+    return () => {
+      unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [connected, establishConnection]);
 
   return (
     <WebSocketContext.Provider
