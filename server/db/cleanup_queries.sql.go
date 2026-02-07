@@ -71,6 +71,42 @@ func (q *Queries) GetExpiredGroups(ctx context.Context, limit int32) ([]GetExpir
 	return items, nil
 }
 
+const getSoftDeletedGroupsWithMessages = `-- name: GetSoftDeletedGroupsWithMessages :many
+SELECT g.id, g.name, g.deleted_at
+FROM groups g
+WHERE g.deleted_at IS NOT NULL
+  AND EXISTS (SELECT 1 FROM messages m WHERE m.group_id = g.id)
+ORDER BY g.deleted_at ASC
+LIMIT $1
+`
+
+type GetSoftDeletedGroupsWithMessagesRow struct {
+	ID        uuid.UUID        `json:"id"`
+	Name      string           `json:"name"`
+	DeletedAt pgtype.Timestamp `json:"deleted_at"`
+}
+
+// Returns soft-deleted groups that still have messages to clean up
+func (q *Queries) GetSoftDeletedGroupsWithMessages(ctx context.Context, limit int32) ([]GetSoftDeletedGroupsWithMessagesRow, error) {
+	rows, err := q.db.Query(ctx, getSoftDeletedGroupsWithMessages, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSoftDeletedGroupsWithMessagesRow
+	for rows.Next() {
+		var i GetSoftDeletedGroupsWithMessagesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStaleDeviceKeys = `-- name: GetStaleDeviceKeys :many
 
 SELECT user_id, device_identifier, last_seen_at
