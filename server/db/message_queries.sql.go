@@ -220,6 +220,8 @@ JOIN users u_sender ON m.user_id = u_sender.id
 JOIN groups g ON m.group_id = g.id
 WHERE u_member.id = $1
 AND m.created_at > ug.created_at
+AND ug.deleted_at IS NULL
+AND g.deleted_at IS NULL
 `
 
 type GetRelevantMessagesRow struct {

@@ -1,4 +1,4 @@
-import { ActivityIndicator, View, Platform } from "react-native";
+import { ActivityIndicator, View, Platform, AppState, AppStateStatus } from "react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { useAuthUtils } from "@/components/context/AuthUtilsContext";
@@ -12,7 +12,7 @@ import { useMessageStore } from "@/components/context/MessageStoreContext";
 
 const AppLayout = () => {
   const { whoami } = useAuthUtils();
-  const { getGroups, getUsers } = useWebSocket();
+  const { getGroups, getUsers, connected: wsConnected } = useWebSocket();
   const {
     store,
     deviceId,
@@ -20,7 +20,7 @@ const AppLayout = () => {
     refreshUsers,
     loadRelevantDeviceKeys,
   } = useGlobalStore();
-  const { loadHistoricalMessages } = useMessageStore();
+  const { loadHistoricalMessages, removeGroupMessages } = useMessageStore();
   const [user, setUser] = useState<User | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const insets = useSafeAreaInsets();
@@ -60,6 +60,12 @@ const AppLayout = () => {
     if (isFetchingGroups.current || !user) return;
     isFetchingGroups.current = true;
     try {
+      // Prune locally-expired groups before fetching
+      const expiredIds = await store.deleteExpiredGroups();
+      for (const groupId of expiredIds) {
+        removeGroupMessages(groupId);
+      }
+
       const data = await getGroups();
       await store.saveGroups(data);
       refreshGroups();
@@ -71,7 +77,7 @@ const AppLayout = () => {
     } finally {
       isFetchingGroups.current = false;
     }
-  }, [user, getGroups, store, refreshGroups]);
+  }, [user, getGroups, store, refreshGroups, removeGroupMessages]);
 
   const isFetchingUsers = useRef(false);
   const fetchUsers = useCallback(async () => {
@@ -109,34 +115,74 @@ const AppLayout = () => {
     }
   }, [user, loadRelevantDeviceKeys]);
 
+  const POLL_INTERVAL = 60000;
+
+  const groupsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const usersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deviceKeysIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearAllIntervals = useCallback(() => {
+    if (groupsIntervalRef.current) {
+      clearInterval(groupsIntervalRef.current);
+      groupsIntervalRef.current = null;
+    }
+    if (usersIntervalRef.current) {
+      clearInterval(usersIntervalRef.current);
+      usersIntervalRef.current = null;
+    }
+    if (deviceKeysIntervalRef.current) {
+      clearInterval(deviceKeysIntervalRef.current);
+      deviceKeysIntervalRef.current = null;
+    }
+  }, []);
+
+  const startIntervals = useCallback(() => {
+    clearAllIntervals();
+    groupsIntervalRef.current = setInterval(fetchGroups, POLL_INTERVAL);
+    usersIntervalRef.current = setInterval(fetchUsers, POLL_INTERVAL);
+    deviceKeysIntervalRef.current = setInterval(fetchDeviceKeys, POLL_INTERVAL);
+  }, [clearAllIntervals, fetchGroups, fetchUsers, fetchDeviceKeys]);
+
+  const runCatchUpSync = useCallback(() => {
+    fetchGroups();
+    fetchUsers();
+    loadHistoricalMessages();
+    fetchDeviceKeys();
+  }, [fetchGroups, fetchUsers, loadHistoricalMessages, fetchDeviceKeys]);
+
   useEffect(() => {
     if (user && deviceId) {
-      fetchGroups();
-      fetchUsers();
-      loadHistoricalMessages();
-      fetchDeviceKeys();
+      // Initial fetch on mount
+      runCatchUpSync();
+      startIntervals();
 
-      const groupsIntervalId = setInterval(fetchGroups, 5000);
-      const usersIntervalId = setInterval(fetchUsers, 5000);
-      const messagesIntervalId = setInterval(loadHistoricalMessages, 5000);
-      const deviceKeysIntervalId = setInterval(fetchDeviceKeys, 5000);
+      const handleAppStateChange = (nextState: AppStateStatus) => {
+        if (nextState === "active") {
+          runCatchUpSync();
+          startIntervals();
+        } else {
+          clearAllIntervals();
+        }
+      };
+
+      const subscription = AppState.addEventListener("change", handleAppStateChange);
 
       return () => {
-        clearInterval(groupsIntervalId);
-        clearInterval(usersIntervalId);
-        clearInterval(messagesIntervalId);
-        clearInterval(deviceKeysIntervalId);
+        clearAllIntervals();
+        subscription.remove();
       };
     }
     return undefined;
-  }, [
-    user,
-    deviceId,
-    fetchGroups,
-    fetchUsers,
-    loadHistoricalMessages,
-    fetchDeviceKeys,
-  ]);
+  }, [user, deviceId, runCatchUpSync, startIntervals, clearAllIntervals]);
+
+  // Catch up on missed messages when WebSocket reconnects (not initial connect)
+  const prevWsConnected = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (prevWsConnected.current === false && wsConnected && user && deviceId) {
+      loadHistoricalMessages();
+    }
+    prevWsConnected.current = wsConnected;
+  }, [wsConnected, user, deviceId, loadHistoricalMessages]);
 
   if (isLoading) {
     return (

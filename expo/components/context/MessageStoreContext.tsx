@@ -20,6 +20,8 @@ import { DEBUG } from "@/utils/debug";
 type MessageAction =
   | { type: "ADD_MESSAGE"; payload: DbMessage }
   | { type: "SET_HISTORICAL_MESSAGES"; payload: DbMessage[] }
+  | { type: "MERGE_MESSAGES"; payload: DbMessage[] }
+  | { type: "REMOVE_GROUP_MESSAGES"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null };
 
@@ -34,6 +36,7 @@ interface MessageStoreContextType {
   loading: boolean;
   error: string | null;
   loadHistoricalMessages: (deviceId?: string) => Promise<void>;
+  removeGroupMessages: (groupId: string) => void;
   optimistic: Record<string, OptimisticMessageItem[]>;
   addOptimisticDisplayable: (item: OptimisticMessageItem) => void;
   removeOptimisticDisplayable: (groupId: string, id: string) => void;
@@ -87,6 +90,35 @@ export const messageReducer = (
         );
       }
       return { ...state, messages: messagesByGroup };
+    }
+    case "MERGE_MESSAGES": {
+      const incoming = action.payload.reduce(
+        (acc, message) => {
+          const groupId = message.group_id;
+          if (!acc[groupId]) acc[groupId] = [];
+          acc[groupId].push(message);
+          return acc;
+        },
+        {} as Record<string, DbMessage[]>
+      );
+      const merged = { ...state.messages };
+      for (const groupId in incoming) {
+        const existingMap = new Map(
+          (merged[groupId] || []).map((m) => [m.id, m])
+        );
+        for (const msg of incoming[groupId]) {
+          existingMap.set(msg.id, msg);
+        }
+        merged[groupId] = Array.from(existingMap.values()).sort(
+          (a, b) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+      }
+      return { ...state, messages: merged };
+    }
+    case "REMOVE_GROUP_MESSAGES": {
+      const { [action.payload]: _, ...remaining } = state.messages;
+      return { ...state, messages: remaining };
     }
     case "SET_LOADING":
       return { ...state, loading: action.payload };
@@ -229,14 +261,14 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         }
 
         // Only clear messages on the first historical load to prevent flash
-        const shouldClearFirst = !hasLoadedHistoricalMessagesRef.current;
-        await store.saveMessages(processedMessages, shouldClearFirst);
+        const isFirstLoad = !hasLoadedHistoricalMessagesRef.current;
+        await store.saveMessages(processedMessages, isFirstLoad);
 
         // Mark that we've loaded historical messages at least once
         hasLoadedHistoricalMessagesRef.current = true;
 
         dispatch({
-          type: "SET_HISTORICAL_MESSAGES",
+          type: isFirstLoad ? "SET_HISTORICAL_MESSAGES" : "MERGE_MESSAGES",
           payload: processedMessages,
         });
         dispatch({ type: "SET_ERROR", payload: null });
@@ -359,12 +391,20 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     [state.messages]
   );
 
+  const removeGroupMessages = useCallback(
+    (groupId: string) => {
+      dispatch({ type: "REMOVE_GROUP_MESSAGES", payload: groupId });
+    },
+    []
+  );
+
   const value = useMemo(
     () => ({
       getMessagesForGroup,
       loading: state.loading,
       error: state.error,
       loadHistoricalMessages,
+      removeGroupMessages,
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
@@ -375,6 +415,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       state.loading,
       state.error,
       loadHistoricalMessages,
+      removeGroupMessages,
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,

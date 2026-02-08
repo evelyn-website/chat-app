@@ -1427,6 +1427,100 @@ describe('Store', () => {
     });
   });
 
+  // ======= Expired Group Cleanup Tests =======
+  describe('Expired Group Cleanup (deleteExpiredGroups)', () => {
+    beforeEach(async () => {
+      store = new Store();
+      await store['initPromise'];
+    });
+
+    it('should return empty array when no groups are expired', async () => {
+      const db = (store as any).db;
+      db.setMockData({ allResults: [] });
+
+      const result = await store.deleteExpiredGroups();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return expired group IDs', async () => {
+      const db = (store as any).db;
+      db.setMockData({
+        allResults: [
+          { id: 'group-expired-1' },
+          { id: 'group-expired-2' },
+        ],
+      });
+
+      const result = await store.deleteExpiredGroups();
+
+      expect(result).toEqual(['group-expired-1', 'group-expired-2']);
+    });
+
+    it('should delete expired groups from the database', async () => {
+      const db = (store as any).db;
+      db.setMockData({
+        allResults: [{ id: 'group-expired-1' }],
+      });
+
+      await store.deleteExpiredGroups();
+
+      const queryLog = db.getQueryLog();
+      const deleteGroupQuery = queryLog.find(
+        (q) => q.sql.includes('DELETE FROM groups') && q.sql.includes('IN')
+      );
+
+      expect(deleteGroupQuery).toBeDefined();
+    });
+
+    it('should delete group_reads for expired groups', async () => {
+      const db = (store as any).db;
+      db.setMockData({
+        allResults: [{ id: 'group-expired-1' }],
+      });
+
+      await store.deleteExpiredGroups();
+
+      const queryLog = db.getQueryLog();
+      const deleteReadsQuery = queryLog.find(
+        (q) => q.sql.includes('DELETE FROM group_reads') && q.sql.includes('IN')
+      );
+
+      expect(deleteReadsQuery).toBeDefined();
+    });
+
+    it('should query for groups with end_time in the past', async () => {
+      const db = (store as any).db;
+      db.setMockData({ allResults: [] });
+
+      await store.deleteExpiredGroups();
+
+      const queryLog = db.getQueryLog();
+      const selectQuery = queryLog.find(
+        (q) =>
+          q.sql.includes('SELECT') &&
+          q.sql.includes('end_time IS NOT NULL') &&
+          q.sql.includes("end_time < datetime('now')")
+      );
+
+      expect(selectQuery).toBeDefined();
+    });
+
+    it('should not run delete queries when no groups are expired', async () => {
+      const db = (store as any).db;
+      db.setMockData({ allResults: [] });
+
+      await store.deleteExpiredGroups();
+
+      const queryLog = db.getQueryLog();
+      const deleteQuery = queryLog.find(
+        (q) => q.method === 'runAsync' && q.sql.includes('DELETE')
+      );
+
+      expect(deleteQuery).toBeUndefined();
+    });
+  });
+
   // ======= Cleanup Operations Tests =======
   describe('Cleanup Operations', () => {
     beforeEach(async () => {

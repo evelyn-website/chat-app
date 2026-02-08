@@ -607,6 +607,28 @@ export class Store implements IStore {
     );
   }
 
+  async deleteExpiredGroups(): Promise<string[]> {
+    const db = await this.getDb();
+    const expired = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM groups WHERE end_time IS NOT NULL AND end_time < datetime('now')`
+    );
+    if (expired.length === 0) return [];
+    const expiredIds = expired.map((g) => g.id);
+    return this.performSerialTransaction(async (txDb) => {
+      const placeholders = expiredIds.map(() => "?").join(",");
+      // Messages are cleaned up via ON DELETE CASCADE
+      await txDb.runAsync(
+        `DELETE FROM group_reads WHERE group_id IN (${placeholders})`,
+        expiredIds
+      );
+      await txDb.runAsync(
+        `DELETE FROM groups WHERE id IN (${placeholders})`,
+        expiredIds
+      );
+      return expiredIds;
+    });
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     try {
