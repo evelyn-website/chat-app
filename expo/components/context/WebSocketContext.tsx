@@ -4,6 +4,7 @@ import {
   User,
   UpdateGroupParams,
   CreateGroupParams,
+  GroupEvent,
 } from "@/types/types";
 import React, {
   createContext,
@@ -24,6 +25,8 @@ interface WebSocketContextType {
   connected: boolean;
   onMessage: (callback: (packet: RawMessage) => void) => void;
   removeMessageHandler: (callback: (packet: RawMessage) => void) => void;
+  onGroupEvent: (callback: (event: GroupEvent) => void) => void;
+  removeGroupEventHandler: (callback: (event: GroupEvent) => void) => void;
   establishConnection: () => Promise<void>;
   disconnect: () => void;
   createGroup: (
@@ -67,6 +70,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const socketRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const messageHandlersRef = useRef<((packet: RawMessage) => void)[]>([]);
+  const groupEventHandlersRef = useRef<((event: GroupEvent) => void)[]>([]);
   const isReconnecting = useRef(false);
   const preventRetriesRef = useRef(false);
   const appState = useRef(AppState.currentState);
@@ -277,6 +281,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
               }
             } else {
               if (
+                parsedData.type === "group_event" &&
+                parsedData.event &&
+                parsedData.group_id
+              ) {
+                groupEventHandlersRef.current.forEach((handler) => {
+                  try {
+                    handler(parsedData as GroupEvent);
+                  } catch (handlerError) {
+                    console.error("Error in group event handler:", handlerError);
+                  }
+                });
+              } else if (
                 parsedData.group_id &&
                 parsedData.ciphertext &&
                 parsedData.envelopes &&
@@ -477,6 +493,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  const onGroupEvent = useCallback((callback: (event: GroupEvent) => void) => {
+    if (!groupEventHandlersRef.current.includes(callback)) {
+      groupEventHandlersRef.current = [...groupEventHandlersRef.current, callback];
+    }
+  }, []);
+
+  const removeGroupEventHandler = useCallback(
+    (callback: (event: GroupEvent) => void) => {
+      groupEventHandlersRef.current = groupEventHandlersRef.current.filter(
+        (h) => h !== callback,
+      );
+    },
+    [],
+  );
+
   useEffect(() => {
     preventRetriesRef.current = false;
     return () => {
@@ -584,6 +615,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         connected,
         onMessage,
         removeMessageHandler,
+        onGroupEvent,
+        removeGroupEventHandler,
         establishConnection,
         disconnect,
         createGroup,

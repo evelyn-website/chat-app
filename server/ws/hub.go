@@ -330,6 +330,11 @@ func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID) {
 		client.AddGroup(groupID)
 		h.addClientToLocalGroupStructLocked(client, groupID)
 		log.Printf("Hub %s: Updated local state for user %s added to group %s", h.serverID, userID.String(), groupID.String())
+		select {
+		case client.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: groupID}:
+		default:
+			log.Printf("Hub %s: Events channel full for client %s on user_invited for group %s", h.serverID, userID.String(), groupID.String())
+		}
 	}
 }
 
@@ -339,6 +344,11 @@ func (h *Hub) handleUserRemovedFromGroupEvent(userID uuid.UUID, groupID uuid.UUI
 
 	client, clientConnectedToThisInstance := h.Clients[userID]
 	if clientConnectedToThisInstance {
+		select {
+		case client.Events <- &ClientEvent{Type: "group_event", Event: "user_removed", GroupID: groupID}:
+		default:
+			log.Printf("Hub %s: Events channel full for client %s on user_removed for group %s", h.serverID, userID.String(), groupID.String())
+		}
 		h.removeClientFromLocalGroupStructLocked(client, groupID)
 		client.RemoveGroup(groupID)
 		log.Printf("Hub %s: Updated local state for user %s removed from group %s", h.serverID, userID.String(), groupID.String())
@@ -379,6 +389,11 @@ func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID) {
 	if group, exists := h.Groups[groupID]; exists {
 		group.mutex.Lock()
 		for clientID, client := range group.Clients {
+			select {
+			case client.Events <- &ClientEvent{Type: "group_event", Event: "group_deleted", GroupID: groupID}:
+			default:
+				log.Printf("Hub %s: Events channel full for client %s on group_deleted for group %s", h.serverID, clientID.String(), groupID.String())
+			}
 			client.RemoveGroup(groupID)
 			log.Printf("Hub %s: Client %s removed from local cache of deleted group %s", h.serverID, clientID.String(), groupID.String())
 		}
@@ -398,6 +413,15 @@ func (h *Hub) handleGroupUpdatedEvent(groupID uuid.UUID, newName string) {
 			group.Name = newName
 			log.Printf("Hub %s: Updated local cache for group %s name from '%s' to '%s'", h.serverID, groupID.String(), oldName, newName)
 		}
+		group.mutex.RLock()
+		for _, client := range group.Clients {
+			select {
+			case client.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: groupID}:
+			default:
+				log.Printf("Hub %s: Events channel full for client %s on group_updated for group %s", h.serverID, client.User.ID.String(), groupID.String())
+			}
+		}
+		group.mutex.RUnlock()
 	} else {
 		log.Printf("Hub %s: Received group_updated event for group %s not in local cache.", h.serverID, groupID.String())
 	}
@@ -487,6 +511,7 @@ func (h *Hub) Run() {
 				}
 				client.mutex.RUnlock()
 				close(client.Message)
+				close(client.Events)
 				log.Printf("Hub %s: Client %s unregistered locally.", h.serverID, client.User.ID.String())
 			}
 			h.mutex.Unlock()
@@ -574,6 +599,17 @@ func (h *Hub) Run() {
 			}
 
 		case removeMsg := <-h.RemoveUserFromGroupChan:
+			// Forward event to locally connected client before updating state
+			h.mutex.RLock()
+			if client, ok := h.Clients[removeMsg.UserID]; ok {
+				select {
+				case client.Events <- &ClientEvent{Type: "group_event", Event: "user_removed", GroupID: removeMsg.GroupID}:
+				default:
+					log.Printf("Hub %s: Events channel full for client %s on user_removed (direct) for group %s", h.serverID, removeMsg.UserID.String(), removeMsg.GroupID.String())
+				}
+			}
+			h.mutex.RUnlock()
+
 			groupMembersKey := redisGroupMembersPrefix + removeMsg.GroupID.String() + ":members"
 			userGroupsKey := redisUserGroupsPrefix + removeMsg.UserID.String() + ":groups"
 
@@ -617,6 +653,16 @@ func (h *Hub) Run() {
 				} else {
 					h.redisClient.Publish(h.ctx, pubSubGroupEventsChannel, serializedEvt)
 				}
+				// Forward event to locally connected client
+				h.mutex.RLock()
+				if client, ok := h.Clients[addMsg.UserID]; ok {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: addMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on user_invited (direct) for group %s", h.serverID, addMsg.UserID.String(), addMsg.GroupID.String())
+					}
+				}
+				h.mutex.RUnlock()
 			}
 
 		case initMsg := <-h.InitializeGroupChan:
@@ -647,6 +693,21 @@ func (h *Hub) Run() {
 			groupIDStr := delMsg.GroupID.String()
 			groupInfoKey := redisGroupInfoPrefix + groupIDStr
 			groupMembersKey := redisGroupMembersPrefix + groupIDStr + ":members"
+
+			// Forward group_deleted event to locally connected group members before cleanup
+			h.mutex.RLock()
+			if group, exists := h.Groups[delMsg.GroupID]; exists {
+				group.mutex.RLock()
+				for _, client := range group.Clients {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "group_deleted", GroupID: delMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on group_deleted (direct) for group %s", h.serverID, client.User.ID.String(), groupIDStr)
+					}
+				}
+				group.mutex.RUnlock()
+			}
+			h.mutex.RUnlock()
 
 			members, err := h.redisClient.SMembers(h.ctx, groupMembersKey).Result()
 			if err != nil && err != redis.Nil {
@@ -687,6 +748,21 @@ func (h *Hub) Run() {
 					log.Printf("Hub %s: Updated group name in Redis for group %s to '%s'", h.serverID, updateMsg.GroupID.String(), updateMsg.Name)
 				}
 			}
+
+			// Forward group_updated event to locally connected group members
+			h.mutex.RLock()
+			if group, exists := h.Groups[updateMsg.GroupID]; exists {
+				group.mutex.RLock()
+				for _, client := range group.Clients {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: updateMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on group_updated (direct) for group %s", h.serverID, client.User.ID.String(), updateMsg.GroupID.String())
+					}
+				}
+				group.mutex.RUnlock()
+			}
+			h.mutex.RUnlock()
 
 			pubSubEvt := PubSubMessage{
 				Type:           "group_updated",

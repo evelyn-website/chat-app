@@ -2,7 +2,7 @@ import { ActivityIndicator, View, Platform, AppState, AppStateStatus } from "rea
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { useAuthUtils } from "@/components/context/AuthUtilsContext";
-import { User } from "@/types/types";
+import { User, GroupEvent } from "@/types/types";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import { CanceledError, isCancel } from "axios";
@@ -12,7 +12,7 @@ import { useMessageStore } from "@/components/context/MessageStoreContext";
 
 const AppLayout = () => {
   const { whoami } = useAuthUtils();
-  const { getGroups, getUsers, connected: wsConnected } = useWebSocket();
+  const { getGroups, getUsers, connected: wsConnected, onGroupEvent, removeGroupEventHandler } = useWebSocket();
   const {
     store,
     deviceId,
@@ -114,6 +114,38 @@ const AppLayout = () => {
       isFetchingDeviceKeys.current = false;
     }
   }, [user, loadRelevantDeviceKeys]);
+
+  const handleGroupEvent = useCallback(async (event: GroupEvent) => {
+    switch (event.event) {
+      case "user_invited":
+        fetchGroups();
+        fetchDeviceKeys();
+        break;
+      case "user_removed":
+        await store.deleteGroup(event.group_id);
+        removeGroupMessages(event.group_id);
+        refreshGroups();
+        break;
+      case "group_updated":
+        fetchGroups();
+        break;
+      case "group_deleted":
+        await store.deleteGroup(event.group_id);
+        removeGroupMessages(event.group_id);
+        refreshGroups();
+        break;
+    }
+  }, [fetchGroups, fetchDeviceKeys, store, removeGroupMessages, refreshGroups]);
+
+  useEffect(() => {
+    if (user) {
+      onGroupEvent(handleGroupEvent);
+      return () => {
+        removeGroupEventHandler(handleGroupEvent);
+      };
+    }
+    return undefined;
+  }, [user, onGroupEvent, removeGroupEventHandler, handleGroupEvent]);
 
   const POLL_INTERVAL = 60000;
 

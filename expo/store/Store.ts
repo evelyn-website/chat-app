@@ -607,6 +607,14 @@ export class Store implements IStore {
     );
   }
 
+  async deleteGroup(groupId: string): Promise<void> {
+    return this.performSerialTransaction(async (txDb) => {
+      await txDb.runAsync(`DELETE FROM group_reads WHERE group_id = ?`, [groupId]);
+      await txDb.runAsync(`DELETE FROM groups WHERE id = ?`, [groupId]);
+      // messages cleaned up via ON DELETE CASCADE
+    });
+  }
+
   async deleteExpiredGroups(): Promise<string[]> {
     const db = await this.getDb();
     const expired = await db.getAllAsync<{ id: string }>(

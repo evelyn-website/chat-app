@@ -96,3 +96,10 @@ type ClientGroupUser struct {
 	Admin     bool      `json:"admin"`
 	InvitedAt string    `json:"invited_at"`
 }
+
+// ClientEvent is a server-to-client lifecycle event sent over WebSocket.
+type ClientEvent struct {
+	Type    string    `json:"type"`     // always "group_event"
+	Event   string    `json:"event"`    // "user_invited", "user_removed", "group_updated", "group_deleted"
+	GroupID uuid.UUID `json:"group_id"`
+}
