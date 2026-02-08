@@ -163,3 +163,9 @@ export type PickerImageResult = {
   url: string;
   base64: string;
 };
+
+export type GroupEvent = {
+  type: "group_event";
+  event: "user_invited" | "user_removed" | "group_updated" | "group_deleted";
+  group_id: string;
+};
