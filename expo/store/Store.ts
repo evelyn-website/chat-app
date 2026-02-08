@@ -614,17 +614,19 @@ export class Store implements IStore {
     );
     if (expired.length === 0) return [];
     const expiredIds = expired.map((g) => g.id);
-    const placeholders = expiredIds.map(() => "?").join(",");
-    // Messages are cleaned up via ON DELETE CASCADE
-    await db.runAsync(
-      `DELETE FROM group_reads WHERE group_id IN (${placeholders})`,
-      expiredIds
-    );
-    await db.runAsync(
-      `DELETE FROM groups WHERE id IN (${placeholders})`,
-      expiredIds
-    );
-    return expiredIds;
+    return this.performSerialTransaction(async (txDb) => {
+      const placeholders = expiredIds.map(() => "?").join(",");
+      // Messages are cleaned up via ON DELETE CASCADE
+      await txDb.runAsync(
+        `DELETE FROM group_reads WHERE group_id IN (${placeholders})`,
+        expiredIds
+      );
+      await txDb.runAsync(
+        `DELETE FROM groups WHERE id IN (${placeholders})`,
+        expiredIds
+      );
+      return expiredIds;
+    });
   }
 
   async close(): Promise<void> {

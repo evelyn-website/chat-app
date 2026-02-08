@@ -114,9 +114,6 @@ export const messageReducer = (
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
       }
-      for (const groupId of Object.keys(merged)) {
-        if (!(groupId in incoming)) delete merged[groupId];
-      }
       return { ...state, messages: merged };
     }
     case "REMOVE_GROUP_MESSAGES": {

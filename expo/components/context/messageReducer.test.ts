@@ -300,7 +300,7 @@ describe('messageReducer', () => {
       expect(messages[2].id).toBe('msg-3'); // 16:00
     });
 
-    it('should remove groups no longer in incoming payload', () => {
+    it('should not prune groups absent from incoming payload', () => {
       const msg1 = createMockMessage({ id: 'msg-1', group_id: 'group-1' });
       const msg2 = createMockMessage({ id: 'msg-2', group_id: 'group-2' });
 
@@ -311,7 +311,7 @@ describe('messageReducer', () => {
 
       expect(Object.keys(state.messages)).toHaveLength(2);
 
-      // Merge with only group-1 messages — group-2 was deleted server-side
+      // Merge with only group-1 messages — group-2 should be left alone
       const msg1Updated = createMockMessage({ id: 'msg-1', group_id: 'group-1' });
       state = messageReducer(state, {
         type: 'MERGE_MESSAGES',
@@ -319,7 +319,8 @@ describe('messageReducer', () => {
       });
 
       expect(state.messages['group-1']).toBeDefined();
-      expect(state.messages['group-2']).toBeUndefined();
+      expect(state.messages['group-2']).toBeDefined();
+      expect(state.messages['group-2']).toHaveLength(1);
     });
 
     it('should handle merging into empty state', () => {
@@ -334,7 +335,7 @@ describe('messageReducer', () => {
       expect(state.messages['group-1'][0].id).toBe('msg-1');
     });
 
-    it('should handle merging with empty payload', () => {
+    it('should not disturb existing state when merging with empty payload', () => {
       const msg = createMockMessage({ id: 'msg-1', group_id: 'group-1' });
       let state = messageReducer(initialState, {
         type: 'ADD_MESSAGE',
@@ -346,8 +347,9 @@ describe('messageReducer', () => {
         payload: [],
       });
 
-      // Empty payload means no groups in incoming — all existing groups removed
-      expect(Object.keys(state.messages)).toHaveLength(0);
+      // Empty payload should leave existing messages untouched
+      expect(state.messages['group-1']).toHaveLength(1);
+      expect(state.messages['group-1'][0].id).toBe('msg-1');
     });
   });
 
