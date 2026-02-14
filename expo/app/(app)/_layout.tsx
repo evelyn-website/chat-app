@@ -2,7 +2,8 @@ import { ActivityIndicator, View, Platform, AppState, AppStateStatus } from "rea
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { useAuthUtils } from "@/components/context/AuthUtilsContext";
-import { User, GroupEvent } from "@/types/types";
+import { User } from "@/types/types";
+import { useGroupEventHandler } from "@/hooks/useGroupEventHandler";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import { CanceledError, isCancel } from "axios";
@@ -115,27 +116,7 @@ const AppLayout = () => {
     }
   }, [user, loadRelevantDeviceKeys]);
 
-  const handleGroupEvent = useCallback(async (event: GroupEvent) => {
-    switch (event.event) {
-      case "user_invited":
-        fetchGroups();
-        fetchDeviceKeys();
-        break;
-      case "user_removed":
-        await store.deleteGroup(event.group_id);
-        removeGroupMessages(event.group_id);
-        refreshGroups();
-        break;
-      case "group_updated":
-        fetchGroups();
-        break;
-      case "group_deleted":
-        await store.deleteGroup(event.group_id);
-        removeGroupMessages(event.group_id);
-        refreshGroups();
-        break;
-    }
-  }, [fetchGroups, fetchDeviceKeys, store, removeGroupMessages, refreshGroups]);
+  const handleGroupEvent = useGroupEventHandler(fetchGroups, fetchDeviceKeys);
 
   useEffect(() => {
     if (user) {
