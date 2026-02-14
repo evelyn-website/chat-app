@@ -15,8 +15,7 @@ export function useGroupEventHandler(
       try {
         switch (event.event) {
           case "user_invited":
-            fetchGroups();
-            fetchDeviceKeys();
+            await Promise.all([fetchGroups(), fetchDeviceKeys()]);
             break;
           case "user_removed":
             await store.deleteGroup(event.group_id);
@@ -24,7 +23,7 @@ export function useGroupEventHandler(
             refreshGroups();
             break;
           case "group_updated":
-            fetchGroups();
+            await fetchGroups();
             break;
           case "group_deleted":
             await store.deleteGroup(event.group_id);
