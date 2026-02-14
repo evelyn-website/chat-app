@@ -30,6 +30,9 @@ export function useGroupEventHandler(
             removeGroupMessages(event.group_id);
             refreshGroups();
             break;
+          default:
+            console.warn(`Received unknown group event type: ${event.event}`);
+            break;
         }
       } catch (err) {
         console.error("Error handling group event:", err);

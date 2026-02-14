@@ -37,7 +37,7 @@ func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow) *Client {
 	return &Client{
 		conn:    conn,
 		Message: make(chan *RawMessageE2EE, 10),
-		Events:  make(chan *ClientEvent, 5),
+		Events:  make(chan *ClientEvent, 20),
 		Groups:  make(map[uuid.UUID]bool),
 		User:    user,
 		ctx:     ctx,

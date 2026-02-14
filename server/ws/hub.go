@@ -321,6 +321,9 @@ func (h *Hub) deliverChatMessage(message *RawMessageE2EE) {
 	}
 }
 
+// handleUserAddedToGroupEvent is called from Redis PubSub when any server instance adds a user to a group.
+// The originServerID check prevents duplicate event delivery: the originating server already sent the
+// event directly to the client in Run(), so we only forward here for clients on other server instances.
 func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -340,6 +343,8 @@ func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID, o
 	}
 }
 
+// handleUserRemovedFromGroupEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
 func (h *Hub) handleUserRemovedFromGroupEvent(userID uuid.UUID, groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -386,6 +391,8 @@ func (h *Hub) handleGroupCreatedEvent(groupID uuid.UUID, name string, adminID uu
 	}
 }
 
+// handleGroupDeletedEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
 func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -409,6 +416,8 @@ func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID, originServerID string) 
 	}
 }
 
+// handleGroupUpdatedEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
 func (h *Hub) handleGroupUpdatedEvent(groupID uuid.UUID, newName string, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
