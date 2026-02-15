@@ -109,6 +109,32 @@ func (s *NotificationService) SendMessageNotification(
 		return
 	}
 
+	// Filter out users who have muted this group
+	mutedUserIDs, err := s.db.GetMutedUserIDsForGroup(ctx, &groupID)
+	if err != nil {
+		log.Printf("NotificationService: Error getting muted users for group %s: %v", groupID.String(), err)
+		// Continue without filtering — better to over-notify than silently fail
+	} else if len(mutedUserIDs) > 0 {
+		mutedSet := make(map[uuid.UUID]bool, len(mutedUserIDs))
+		for _, id := range mutedUserIDs {
+			if id != nil {
+				mutedSet[*id] = true
+			}
+		}
+		filtered := offlineUserIDs[:0]
+		for _, uid := range offlineUserIDs {
+			if !mutedSet[uid] {
+				filtered = append(filtered, uid)
+			}
+		}
+		offlineUserIDs = filtered
+	}
+
+	if len(offlineUserIDs) == 0 {
+		log.Printf("NotificationService: All offline users have muted group %s", groupID.String())
+		return
+	}
+
 	// Get push tokens for offline users
 	tokens, err := s.db.GetPushTokensForUsers(ctx, offlineUserIDs)
 	if err != nil {

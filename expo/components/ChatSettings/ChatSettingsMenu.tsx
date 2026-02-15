@@ -1,4 +1,4 @@
-import { Text, View, TextInput, Alert, Linking, Platform, TouchableOpacity } from "react-native";
+import { Text, View, TextInput, Alert, Linking, Platform, TouchableOpacity, Switch } from "react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import type { Group, UpdateGroupParams, DateOptions } from "@/types/types";
 import UserList from "./UserList";
@@ -24,7 +24,7 @@ const ChatSettingsMenu = (props: {
   const { store, refreshGroups } = useGlobalStore();
   const currentUserIsAdmin = initialGroup.admin;
 
-  const { inviteUsersToGroup, updateGroup, getGroups } = useWebSocket();
+  const { inviteUsersToGroup, updateGroup, getGroups, toggleGroupMuted } = useWebSocket();
 
   const [currentGroup, setCurrentGroup] = useState<Group>(initialGroup);
 
@@ -61,12 +61,15 @@ const ChatSettingsMenu = (props: {
 
   const [usersToInvite, setUsersToInvite] = useState<string[]>([]);
 
+  const [isMuted, setIsMuted] = useState(initialGroup.muted ?? false);
+  const [isTogglingMute, setIsTogglingMute] = useState(false);
   const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     setCurrentGroup(initialGroup);
+    setIsMuted(initialGroup.muted ?? false);
     if (!isEditing) {
       setEditableName(initialGroup.name);
       setEditableDescription(initialGroup.description || "");
@@ -239,6 +242,25 @@ const ChatSettingsMenu = (props: {
       }
     }
   }, [uploadImage, currentGroup.id, isUploading]);
+
+  const handleToggleMute = async () => {
+    if (isTogglingMute) return;
+    setIsTogglingMute(true);
+    try {
+      const result = await toggleGroupMuted(currentGroup.id);
+      if (result !== undefined) {
+        setIsMuted(result.muted);
+        await syncWithServerAndGlobalStore();
+      } else {
+        Alert.alert("Error", "Could not toggle mute. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error toggling mute:", error);
+      Alert.alert("Error", "Could not toggle mute. Please try again.");
+    } finally {
+      setIsTogglingMute(false);
+    }
+  };
 
   const handleRemoveImage = useCallback(() => {
     setCurrentImageUrlForPreview("");
@@ -426,6 +448,23 @@ const ChatSettingsMenu = (props: {
             </View>
           </View>
         )}
+      </View>
+
+      {/* Notification Settings Card */}
+      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
+        <Text className="text-lg font-semibold text-blue-400 mb-3">
+          Notifications
+        </Text>
+        <View className="flex-row justify-between items-center bg-gray-800 rounded-lg p-3">
+          <Text className="text-base text-gray-200">Mute Notifications</Text>
+          <Switch
+            value={isMuted}
+            onValueChange={handleToggleMute}
+            disabled={isTogglingMute}
+            trackColor={{ false: "#4B5563", true: "#3B82F6" }}
+            thumbColor={isMuted ? "#FFFFFF" : "#9CA3AF"}
+          />
+        </View>
       </View>
 
       {/* Group Members Card */}

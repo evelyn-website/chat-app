@@ -1,6 +1,6 @@
 import React from "react";
 import { render, fireEvent } from "@testing-library/react-native";
-import { Platform, Linking } from "react-native";
+import { Platform, Linking, Alert } from "react-native";
 import ChatSettingsMenu from "./ChatSettingsMenu";
 import type { Group } from "@/types/types";
 
@@ -12,11 +12,14 @@ jest.mock("../context/GlobalStoreContext", () => ({
   }),
 }));
 
+const mockToggleGroupMuted = jest.fn();
+
 jest.mock("../context/WebSocketContext", () => ({
   useWebSocket: () => ({
     inviteUsersToGroup: jest.fn(),
     updateGroup: jest.fn(),
     getGroups: jest.fn().mockResolvedValue([]),
+    toggleGroupMuted: mockToggleGroupMuted,
   }),
 }));
 
@@ -150,5 +153,89 @@ describe("ChatSettingsMenu – location maps link", () => {
     expect(mockOpenURL).toHaveBeenCalledWith(
       `https://maps.apple.com/?q=${encodeURIComponent(location)}`
     );
+  });
+});
+
+describe("ChatSettingsMenu – mute notifications toggle", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("renders the Mute Notifications toggle for non-admin members", () => {
+    const group = makeGroup({ admin: false });
+    const { getByText } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    expect(getByText("Mute Notifications")).toBeTruthy();
+  });
+
+  it("renders the Mute Notifications toggle for admin members", () => {
+    const group = makeGroup({ admin: true });
+    const { getByText } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    expect(getByText("Mute Notifications")).toBeTruthy();
+  });
+
+  it("renders the Notifications section header", () => {
+    const group = makeGroup();
+    const { getByText } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    expect(getByText("Notifications")).toBeTruthy();
+  });
+
+  it("initializes the toggle to off when group is not muted", () => {
+    const group = makeGroup({ muted: false });
+    const { getByRole } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    const toggle = getByRole("switch");
+    expect(toggle.props.value).toBe(false);
+  });
+
+  it("initializes the toggle to on when group is muted", () => {
+    const group = makeGroup({ muted: true });
+    const { getByRole } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    const toggle = getByRole("switch");
+    expect(toggle.props.value).toBe(true);
+  });
+
+  it("calls toggleGroupMuted with group id when toggled", async () => {
+    mockToggleGroupMuted.mockResolvedValue({ muted: true });
+    const group = makeGroup({ muted: false });
+    const { getByRole } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    const toggle = getByRole("switch");
+    await fireEvent(toggle, "valueChange", true);
+
+    expect(mockToggleGroupMuted).toHaveBeenCalledWith("group-1");
+  });
+
+  it("shows alert when toggleGroupMuted returns undefined", async () => {
+    mockToggleGroupMuted.mockResolvedValue(undefined);
+    const alertSpy = jest.spyOn(Alert, "alert");
+    const group = makeGroup({ muted: false });
+    const { getByRole } = render(
+      <ChatSettingsMenu group={group} onUserKicked={jest.fn()} />
+    );
+
+    const toggle = getByRole("switch");
+    await fireEvent(toggle, "valueChange", true);
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Error",
+      "Could not toggle mute. Please try again."
+    );
+    alertSpy.mockRestore();
   });
 });

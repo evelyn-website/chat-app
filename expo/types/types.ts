@@ -34,6 +34,7 @@ export type Group = {
   location?: string | null;
   image_url?: string | null;
   blurhash?: string | null;
+  muted?: boolean;
   last_read_timestamp?: string | null;
   last_message_timestamp?: string | null;
 };

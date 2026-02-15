@@ -48,6 +48,7 @@ interface WebSocketContextType {
   leaveGroup: (group_id: string) => void;
   getGroups: () => Promise<Group[]>;
   getUsers: () => Promise<User[]>;
+  toggleGroupMuted: (groupId: string) => Promise<{ muted: boolean } | undefined>;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -446,6 +447,20 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     return response.data as User[];
   }, []);
 
+  const toggleGroupMuted = useCallback(
+    async (groupId: string): Promise<{ muted: boolean } | undefined> => {
+      const apiBaseURL = `${process.env.EXPO_PUBLIC_HOST}/api`;
+      return http
+        .put(`${apiBaseURL}/groups/${groupId}/mute`)
+        .then((response) => response.data as { muted: boolean })
+        .catch((error) => {
+          console.error("Error toggling group mute:", error);
+          return undefined;
+        });
+    },
+    [],
+  );
+
   const sendMessage = useCallback(
     (packet: RawMessage) => {
       const socket = socketRef.current;
@@ -612,6 +627,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         removeUserFromGroup,
         getGroups,
         getUsers,
+        toggleGroupMuted,
       }}
     >
       {children}

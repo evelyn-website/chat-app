@@ -4,7 +4,19 @@ import NetInfo from '@react-native-community/netinfo';
 import { WebSocketProvider, useWebSocket } from './WebSocketContext';
 
 // Mock dependencies
-jest.mock('@/util/custom-axios');
+jest.mock('@/util/custom-axios', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn().mockResolvedValue({ data: [] }),
+    post: jest.fn().mockResolvedValue({ data: {} }),
+    put: jest.fn().mockResolvedValue({ data: {} }),
+    delete: jest.fn().mockResolvedValue({ data: {} }),
+    interceptors: {
+      request: { use: jest.fn() },
+      response: { use: jest.fn() },
+    },
+  },
+}));
 jest.mock('@/util/custom-store', () => ({
   get: jest.fn().mockResolvedValue('test-jwt-token'),
   set: jest.fn(),
@@ -90,6 +102,12 @@ describe('WebSocketContext', () => {
 
       expect(typeof result.current.getGroups).toBe('function');
       expect(typeof result.current.getUsers).toBe('function');
+    });
+
+    it('should provide toggleGroupMuted function', () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      expect(typeof result.current.toggleGroupMuted).toBe('function');
     });
 
     it('should throw error when used outside provider', () => {
@@ -387,6 +405,41 @@ describe('WebSocketContext', () => {
 
       // Handler was removed, so it should not have been called
       expect(eventHandler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('toggleGroupMuted', () => {
+    it('should call PUT on the mute endpoint', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.put.mockResolvedValue({ data: { muted: true } });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      let response: { muted: boolean } | undefined;
+      await act(async () => {
+        response = await result.current.toggleGroupMuted('group-123');
+      });
+
+      expect(http.put).toHaveBeenCalledWith(
+        expect.stringContaining('/groups/group-123/mute')
+      );
+      expect(response).toEqual({ muted: true });
+    });
+
+    it('should return undefined on error', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.put.mockRejectedValue(new Error('Network error'));
+
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      let response: { muted: boolean } | undefined;
+      await act(async () => {
+        response = await result.current.toggleGroupMuted('group-123');
+      });
+
+      expect(response).toBeUndefined();
+      consoleSpy.mockRestore();
     });
   });
 

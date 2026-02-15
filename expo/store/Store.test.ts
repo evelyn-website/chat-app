@@ -156,6 +156,32 @@ describe('Store', () => {
       await store2.close();
     });
 
+    it('should add muted column to groups in migration v12', async () => {
+      store = new Store();
+      await store['initPromise'];
+
+      const db = (store as any).db;
+      const queryLog = db.getQueryLog();
+      const mutedMigration = queryLog.find((q) =>
+        q.sql.includes('ALTER TABLE groups ADD COLUMN muted')
+      );
+
+      expect(mutedMigration).toBeDefined();
+    });
+
+    it('should set database version to 12 during migration', async () => {
+      store = new Store();
+      await store['initPromise'];
+
+      const db = (store as any).db;
+      const queryLog = db.getQueryLog();
+      const v12Pragma = queryLog.find((q) =>
+        q.sql.includes('PRAGMA user_version = 12')
+      );
+
+      expect(v12Pragma).toBeDefined();
+    });
+
     it('should handle migrations from version 0 to 10', async () => {
       store = new Store();
       await store['initPromise'];
@@ -960,6 +986,85 @@ describe('Store', () => {
       expect(true).toBe(true);
     });
 
+    it('should save muted status as integer', async () => {
+      const groups: Group[] = [
+        {
+          id: 'group-muted',
+          name: 'Muted Group',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+          admin: false,
+          start_time: '2024-01-01T10:00:00Z',
+          end_time: '2024-01-01T18:00:00Z',
+          group_users: [],
+          muted: true,
+        },
+      ];
+
+      await store.saveGroups(groups);
+
+      const db = (store as any).db;
+      const queryLog = db.getQueryLog();
+      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+
+      expect(insertQuery).toBeDefined();
+      // The last param should be 1 (true -> 1)
+      const params = insertQuery?.params || [];
+      expect(params[params.length - 1]).toBe(1);
+    });
+
+    it('should save unmuted status as 0', async () => {
+      const groups: Group[] = [
+        {
+          id: 'group-unmuted',
+          name: 'Unmuted Group',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+          admin: false,
+          start_time: '2024-01-01T10:00:00Z',
+          end_time: '2024-01-01T18:00:00Z',
+          group_users: [],
+          muted: false,
+        },
+      ];
+
+      await store.saveGroups(groups);
+
+      const db = (store as any).db;
+      const queryLog = db.getQueryLog();
+      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+
+      expect(insertQuery).toBeDefined();
+      const params = insertQuery?.params || [];
+      expect(params[params.length - 1]).toBe(0);
+    });
+
+    it('should default muted to 0 when undefined', async () => {
+      const groups: Group[] = [
+        {
+          id: 'group-default',
+          name: 'Default Group',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+          admin: false,
+          start_time: '2024-01-01T10:00:00Z',
+          end_time: '2024-01-01T18:00:00Z',
+          group_users: [],
+          // muted is undefined
+        },
+      ];
+
+      await store.saveGroups(groups);
+
+      const db = (store as any).db;
+      const queryLog = db.getQueryLog();
+      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+
+      expect(insertQuery).toBeDefined();
+      const params = insertQuery?.params || [];
+      expect(params[params.length - 1]).toBe(0);
+    });
+
     it('should handle null optional fields', async () => {
       const groups: Group[] = [
         {
@@ -1125,6 +1230,82 @@ describe('Store', () => {
 
       expect(result[0].admin).toBe(true);
       expect(result[1].admin).toBe(false);
+    });
+
+    it('should handle muted field as boolean', async () => {
+      const db = (store as any).db;
+      db.setMockData({
+        allResults: [
+          {
+            id: 'muted-group',
+            name: 'Muted Group',
+            admin: 0,
+            group_users: JSON.stringify([]),
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+            start_time: '2024-01-01T10:00:00Z',
+            end_time: '2024-01-01T18:00:00Z',
+            description: null,
+            location: null,
+            image_url: null,
+            blurhash: null,
+            muted: 1,
+            last_read_timestamp: null,
+            last_message_timestamp: null,
+          },
+          {
+            id: 'unmuted-group',
+            name: 'Unmuted Group',
+            admin: 0,
+            group_users: JSON.stringify([]),
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+            start_time: '2024-01-01T10:00:00Z',
+            end_time: '2024-01-01T18:00:00Z',
+            description: null,
+            location: null,
+            image_url: null,
+            blurhash: null,
+            muted: 0,
+            last_read_timestamp: null,
+            last_message_timestamp: null,
+          },
+        ],
+      });
+
+      const result = await store.loadGroups();
+
+      expect(result[0].muted).toBe(true);
+      expect(result[1].muted).toBe(false);
+    });
+
+    it('should default muted to false when field is falsy', async () => {
+      const db = (store as any).db;
+      db.setMockData({
+        allResults: [
+          {
+            id: 'group-1',
+            name: 'Test Group',
+            admin: 1,
+            group_users: JSON.stringify([]),
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+            start_time: '2024-01-01T10:00:00Z',
+            end_time: '2024-01-01T18:00:00Z',
+            description: null,
+            location: null,
+            image_url: null,
+            blurhash: null,
+            muted: 0,
+            last_read_timestamp: null,
+            last_message_timestamp: null,
+          },
+        ],
+      });
+
+      const result = await store.loadGroups();
+
+      expect(result[0].muted).toBe(false);
     });
 
     it('should include last_read_timestamp', async () => {

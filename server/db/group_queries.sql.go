@@ -187,7 +187,7 @@ func (q *Queries) GetGroupWithUsersByID(ctx context.Context, arg GetGroupWithUse
 }
 
 const getGroupsForUser = `-- name: GetGroupsForUser :many
-SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, groups.updated_at,
+SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, ug.muted, groups.updated_at,
 json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at)) AS group_users
 FROM groups
 JOIN user_groups ug ON ug.group_id = groups.id
@@ -209,6 +209,7 @@ type GetGroupsForUserRow struct {
 	EndTime     pgtype.Timestamp `json:"end_time"`
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
 	Admin       bool             `json:"admin"`
+	Muted       bool             `json:"muted"`
 	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
 	GroupUsers  json.RawMessage  `json:"group_users"`
 }
@@ -233,6 +234,7 @@ func (q *Queries) GetGroupsForUser(ctx context.Context, id uuid.UUID) ([]GetGrou
 			&i.EndTime,
 			&i.CreatedAt,
 			&i.Admin,
+			&i.Muted,
 			&i.UpdatedAt,
 			&i.GroupUsers,
 		); err != nil {
