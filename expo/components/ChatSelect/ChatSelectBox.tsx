@@ -15,7 +15,8 @@ export const ChatSelectBox = (props: {
   const isActive = pathname === `/groups/${group.id}`;
   const { activeGroupId } = useGlobalStore();
 
-  // Check if there are unread messages
+  // Suppress unread indicator for the actively viewed group since messages
+  // are read in real time; otherwise check timestamps for unread state.
   const hasUnreadMessages = (() => {
     if (group.id === activeGroupId) return false;
     if (!group.last_message_timestamp) return false;

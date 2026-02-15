@@ -56,13 +56,14 @@ const GroupPage = () => {
     return allGroups.find((g) => g.id.toString() === id) || null;
   }, [id, allGroups]);
 
-  // Set active group on mount, clear on unmount, and mark as read on unmount
+  // Track the active group and mark it as read when leaving. Runs on initial
+  // render and whenever the group id changes; the cleanup persists the read
+  // timestamp for the previous group.
   useEffect(() => {
     if (id) {
       setActiveGroupId(id);
     }
     return () => {
-      setActiveGroupId(null);
       if (id && store && store.isAvailable()) {
         store
           .markGroupRead(id)
@@ -76,18 +77,28 @@ const GroupPage = () => {
     };
   }, [id, store, refreshGroups, setActiveGroupId]);
 
+  // Clear activeGroupId only on true component unmount, not on dep changes.
+  // Separated from the above effect so that navigating between groups
+  // (id change) does not null out activeGroupId before the new id is set.
+  useEffect(() => {
+    return () => {
+      setActiveGroupId(null);
+    };
+  }, [setActiveGroupId]);
+
   // Re-mark group as read whenever groupsRefreshKey changes while viewing.
   // Does NOT call refreshGroups() to avoid an infinite loop (refreshGroups
   // increments groupsRefreshKey). The active group suppression in
-  // ChatSelectBox handles the UI side; this just keeps timestamps aligned.
+  // ChatSelectBox handles the UI side; this just keeps the local
+  // last_read_timestamp current so the unread indicator stays correct
+  // when the user eventually leaves the group.
   useEffect(() => {
     if (currentGroup && id && store && store.isAvailable()) {
       store.markGroupRead(id).catch((error) => {
         console.error("Error marking group as read:", error);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupsRefreshKey]);
+  }, [groupsRefreshKey, id, store, currentGroup]);
 
   useEffect(() => {
     if (!isLoading && currentGroup === null) {
