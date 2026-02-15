@@ -60,9 +60,9 @@ const AppLayout = () => {
     if (isFetchingGroups.current || !user) return;
     isFetchingGroups.current = true;
     try {
-      const data = await getGroups();
       // Snapshot local groups before saveGroups prunes them from SQLite
       const localGroups = await store.loadGroups();
+      const data = await getGroups();
       await store.saveGroups(data);
 
       // Clean up in-memory messages for groups the server no longer returns
