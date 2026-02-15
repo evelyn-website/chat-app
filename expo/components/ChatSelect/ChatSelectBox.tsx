@@ -3,6 +3,7 @@ import { Pressable, View, Text } from "react-native";
 import { router, usePathname } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import GroupAvatarSmall from "../GroupAvatarSmall";
+import { useGlobalStore } from "../context/GlobalStoreContext";
 
 export const ChatSelectBox = (props: {
   group: Group;
@@ -12,9 +13,11 @@ export const ChatSelectBox = (props: {
   const { group, isFirst } = props;
   const pathname = usePathname();
   const isActive = pathname === `/groups/${group.id}`;
+  const { activeGroupId } = useGlobalStore();
 
   // Check if there are unread messages
   const hasUnreadMessages = (() => {
+    if (group.id === activeGroupId) return false;
     if (!group.last_message_timestamp) return false;
     if (!group.last_read_timestamp) return true;
 

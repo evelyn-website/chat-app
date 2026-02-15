@@ -3,17 +3,16 @@ import ChatBox from "@/components/ChatBox/ChatBox";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import { Group } from "@/types/types";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { validate } from "uuid";
 
 const GroupPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, store, groupsRefreshKey, refreshGroups } = useGlobalStore();
+  const { user, store, groupsRefreshKey, refreshGroups, setActiveGroupId } = useGlobalStore();
 
   const [allGroups, setAllGroups] = useState<Group[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const markedAsReadRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!store || !id) {
@@ -57,30 +56,13 @@ const GroupPage = () => {
     return allGroups.find((g) => g.id.toString() === id) || null;
   }, [id, allGroups]);
 
-  // Mark group as read when it's successfully loaded (only once per group)
+  // Set active group on mount, clear on unmount, and mark as read on unmount
   useEffect(() => {
-    if (
-      currentGroup &&
-      id &&
-      store &&
-      store.isAvailable() &&
-      markedAsReadRef.current !== id
-    ) {
-      markedAsReadRef.current = id;
-      store
-        .markGroupRead(id)
-        .then(() => {
-          refreshGroups();
-        })
-        .catch((error) => {
-          console.error("Error marking group as read:", error);
-        });
+    if (id) {
+      setActiveGroupId(id);
     }
-  }, [currentGroup, id, store, refreshGroups]);
-
-  // Mark as read when leaving the group (component unmount or group change)
-  useEffect(() => {
     return () => {
+      setActiveGroupId(null);
       if (id && store && store.isAvailable()) {
         store
           .markGroupRead(id)
@@ -92,7 +74,20 @@ const GroupPage = () => {
           });
       }
     };
-  }, [id, store, refreshGroups]);
+  }, [id, store, refreshGroups, setActiveGroupId]);
+
+  // Re-mark group as read whenever groupsRefreshKey changes while viewing.
+  // Does NOT call refreshGroups() to avoid an infinite loop (refreshGroups
+  // increments groupsRefreshKey). The active group suppression in
+  // ChatSelectBox handles the UI side; this just keeps timestamps aligned.
+  useEffect(() => {
+    if (currentGroup && id && store && store.isAvailable()) {
+      store.markGroupRead(id).catch((error) => {
+        console.error("Error marking group as read:", error);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupsRefreshKey]);
 
   useEffect(() => {
     if (!isLoading && currentGroup === null) {

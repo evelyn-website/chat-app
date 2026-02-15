@@ -32,6 +32,7 @@ type Action =
   | { type: "SET_DEVICE_ID"; payload: string | undefined }
   | { type: "TRIGGER_GROUPS_REFRESH" }
   | { type: "TRIGGER_USERS_REFRESH" }
+  | { type: "SET_ACTIVE_GROUP"; payload: string | null }
   | { type: "SET_RELEVANT_DEVICE_KEYS_LOADING"; payload: boolean }
   | {
       type: "SET_RELEVANT_DEVICE_KEYS_SUCCESS";
@@ -44,6 +45,7 @@ interface State {
   deviceId: string | undefined;
   groupsRefreshKey: number;
   usersRefreshKey: number;
+  activeGroupId: string | null;
   relevantDeviceKeys: RelevantDeviceKeysMap;
   deviceKeysLoading: boolean;
   deviceKeysError: string | null;
@@ -55,6 +57,7 @@ interface GlobalStoreContextType extends State {
   setDeviceId: (deviceId: string | undefined) => void;
   refreshGroups: () => void;
   refreshUsers: () => void;
+  setActiveGroupId: (groupId: string | null) => void;
   loadRelevantDeviceKeys: () => Promise<void>;
   getDeviceKeysForUser: (userId: string) => Promise<DeviceKey[] | undefined>;
 }
@@ -64,6 +67,7 @@ const initialState: State = {
   deviceId: undefined,
   groupsRefreshKey: 0,
   usersRefreshKey: 0,
+  activeGroupId: null,
   relevantDeviceKeys: {},
   deviceKeysLoading: false,
   deviceKeysError: null,
@@ -79,6 +83,8 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, groupsRefreshKey: state.groupsRefreshKey + 1 };
     case "TRIGGER_USERS_REFRESH":
       return { ...state, usersRefreshKey: state.usersRefreshKey + 1 };
+    case "SET_ACTIVE_GROUP":
+      return { ...state, activeGroupId: action.payload };
     case "SET_RELEVANT_DEVICE_KEYS_LOADING":
       return {
         ...state,
@@ -133,6 +139,10 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
 
   const refreshUsers = useCallback(() => {
     dispatch({ type: "TRIGGER_USERS_REFRESH" });
+  }, []);
+
+  const setActiveGroupId = useCallback((groupId: string | null) => {
+    dispatch({ type: "SET_ACTIVE_GROUP", payload: groupId });
   }, []);
 
   const loadRelevantDeviceKeys = useCallback(async () => {
@@ -190,6 +200,7 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
       setDeviceId,
       refreshGroups,
       refreshUsers,
+      setActiveGroupId,
       store,
       loadRelevantDeviceKeys,
       getDeviceKeysForUser,
@@ -200,6 +211,7 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
       setDeviceId,
       refreshGroups,
       refreshUsers,
+      setActiveGroupId,
       store,
       loadRelevantDeviceKeys,
       getDeviceKeysForUser,
