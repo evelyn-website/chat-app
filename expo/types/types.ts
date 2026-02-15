@@ -82,6 +82,7 @@ export type ClearImage = {
 export interface DbMessage {
   id: string;
   sender_id: string;
+  sender_username?: string;
   group_id: string;
   timestamp: string;
   client_seq: number | null;
@@ -109,6 +110,7 @@ export type RawMessage = {
   id: string;
   group_id: string;
   sender_id: string;
+  sender_username?: string;
   timestamp: string;
   ciphertext: string; // The encrypted message content (Base64 encoded)
   messageType: MessageType;

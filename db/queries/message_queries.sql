@@ -46,6 +46,7 @@ SELECT
     m.id,
     m.group_id,
     m.user_id AS sender_id,
+    u_sender.username AS sender_username,
     m.created_at AS "timestamp",
     m.ciphertext,
     m.message_type,

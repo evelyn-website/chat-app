@@ -121,8 +121,14 @@ export default function ChatBox({ group }: { group: Group }) {
     group.group_users.forEach((gu) => {
       newMap[gu.id] = { id: gu.id, username: gu.username };
     });
+    // Backfill from messages that have sender_username (e.g. removed users)
+    for (const msg of groupMessages) {
+      if (msg.sender_username && !newMap[msg.sender_id]) {
+        newMap[msg.sender_id] = { id: msg.sender_id, username: msg.sender_username };
+      }
+    }
     usersMapRef.current = newMap;
-  }, [group.group_users, user]);
+  }, [group.group_users, user, groupMessages]);
 
   const [displayableMessages, setDisplayableMessages] = useState<
     DisplayableItem[]
@@ -251,7 +257,7 @@ export default function ChatBox({ group }: { group: Group }) {
 
         const senderInfo = usersMapRef.current[currentMsg.sender_id] || {
           id: currentMsg.sender_id,
-          username: "Unknown User",
+          username: currentMsg.sender_username || "Unknown User",
         };
 
         if (typeof decryptedContent === "string") {

@@ -49,6 +49,7 @@ export interface MessageRow {
   client_seq: number | null;
   client_timestamp: string | null;
   username: string;
+  sender_username: string | null;
   ciphertext: Uint8Array;
   message_type: MessageType;
   msg_nonce: Uint8Array;

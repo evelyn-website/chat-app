@@ -104,7 +104,8 @@ export const processAndDecodeIncomingMessage = (
   currentDeviceId: string,
   senderId: string,
   messageId: string,
-  timestamp: string
+  timestamp: string,
+  senderUsername?: string
 ): DbMessage | null => {
   const envelope = rawMessage.envelopes.find(
     (env) => env.deviceId === currentDeviceId
@@ -121,6 +122,7 @@ export const processAndDecodeIncomingMessage = (
       id: messageId,
       group_id: rawMessage.group_id,
       sender_id: senderId,
+      sender_username: senderUsername,
       timestamp: timestamp,
       client_seq: null,
       client_timestamp: null,
