@@ -244,7 +244,8 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
             preferredDeviceId,
             rawMsg.sender_id,
             rawMsg.id,
-            rawMsg.timestamp
+            rawMsg.timestamp,
+            rawMsg.sender_username
           );
           if (baseProcessed) {
             // Historical messages don't have client metadata (NULL values OK)
@@ -342,7 +343,8 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           globalDeviceId,
           rawMsg.sender_id,
           rawMsg.id,
-          rawMsg.timestamp
+          rawMsg.timestamp,
+          rawMsg.sender_username
         );
 
       if (baseProcessed) {

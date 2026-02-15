@@ -164,13 +164,14 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 		}
 
 		hubMessage := &RawMessageE2EE{
-			ID:          clientMsg.ID,
-			GroupID:     clientMsg.GroupID,
-			MessageType: clientMsg.MessageType,
-			MsgNonce:    clientMsg.MsgNonce,
-			Ciphertext:  clientMsg.Ciphertext,
-			Envelopes:   clientMsg.Envelopes,
-			SenderID:    c.User.ID,
+			ID:             clientMsg.ID,
+			GroupID:        clientMsg.GroupID,
+			MessageType:    clientMsg.MessageType,
+			MsgNonce:       clientMsg.MsgNonce,
+			Ciphertext:     clientMsg.Ciphertext,
+			Envelopes:      clientMsg.Envelopes,
+			SenderID:       c.User.ID,
+			SenderUsername: c.User.Username,
 		}
 
 		select {

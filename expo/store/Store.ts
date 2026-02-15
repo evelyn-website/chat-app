@@ -20,7 +20,7 @@ export class Store implements IStore {
       throw new Error("Database not available for initialization.");
     }
 
-    const TARGET_DATABASE_VERSION = 10;
+    const TARGET_DATABASE_VERSION = 11;
 
     let { user_version: currentDbVersion } = (await this.db.getFirstAsync<{
       user_version: number;
@@ -276,6 +276,24 @@ export class Store implements IStore {
       }
     }
 
+    if (currentDbVersion === 10) {
+      console.log("Migrating to version 11 (Sender username on messages)...");
+      await this.db.execAsync("BEGIN TRANSACTION;");
+      try {
+        await this.db.execAsync(`
+          ALTER TABLE messages ADD COLUMN sender_username TEXT;
+        `);
+        await this.db.execAsync("COMMIT;");
+        await this.db.execAsync(`PRAGMA user_version = 11`);
+        currentDbVersion = 11;
+        console.log("Successfully migrated to version 11.");
+      } catch (error) {
+        await this.db.execAsync("ROLLBACK;");
+        console.error("Error migrating database to version 11:", error);
+        throw error;
+      }
+    }
+
     if (currentDbVersion === TARGET_DATABASE_VERSION) {
       console.log("Database is up to date.");
     } else if (currentDbVersion < TARGET_DATABASE_VERSION) {
@@ -397,8 +415,8 @@ export class Store implements IStore {
       for (const message of messagesToSave) {
         await db.runAsync(
           `INSERT OR REPLACE INTO messages (id, user_id, group_id, timestamp, client_seq, client_timestamp,
-          ciphertext, message_type, msg_nonce, sender_ephemeral_public_key, sym_key_encryption_nonce, sealed_symmetric_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ciphertext, message_type, msg_nonce, sender_ephemeral_public_key, sym_key_encryption_nonce, sealed_symmetric_key, sender_username)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             message.id,
             message.sender_id,
@@ -412,6 +430,7 @@ export class Store implements IStore {
             message.sender_ephemeral_public_key,
             message.sym_key_encryption_nonce,
             message.sealed_symmetric_key,
+            message.sender_username ?? null,
           ]
         );
       }
@@ -511,7 +530,8 @@ export class Store implements IStore {
             m.msg_nonce,
             m.sender_ephemeral_public_key,
             m.sym_key_encryption_nonce,
-            m.sealed_symmetric_key
+            m.sealed_symmetric_key,
+            m.sender_username
       FROM messages AS m
     `);
     return (
@@ -519,6 +539,7 @@ export class Store implements IStore {
         id: row.message_id,
         group_id: row.group_id,
         sender_id: row.user_id,
+        sender_username: row.sender_username ?? undefined,
         timestamp: row.timestamp,
         client_seq: row.client_seq,
         client_timestamp: row.client_timestamp,

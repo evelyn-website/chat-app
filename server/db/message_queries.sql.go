@@ -208,6 +208,7 @@ SELECT
     m.id,
     m.group_id,
     m.user_id AS sender_id,
+    u_sender.username AS sender_username,
     m.created_at AS "timestamp",
     m.ciphertext,
     m.message_type,
@@ -225,14 +226,15 @@ AND g.deleted_at IS NULL
 `
 
 type GetRelevantMessagesRow struct {
-	ID           uuid.UUID        `json:"id"`
-	GroupID      *uuid.UUID       `json:"group_id"`
-	SenderID     *uuid.UUID       `json:"sender_id"`
-	Timestamp    pgtype.Timestamp `json:"timestamp"`
-	Ciphertext   []byte           `json:"ciphertext"`
-	MessageType  MessageType      `json:"message_type"`
-	MsgNonce     []byte           `json:"msg_nonce"`
-	KeyEnvelopes []byte           `json:"key_envelopes"`
+	ID             uuid.UUID        `json:"id"`
+	GroupID        *uuid.UUID       `json:"group_id"`
+	SenderID       *uuid.UUID       `json:"sender_id"`
+	SenderUsername string           `json:"sender_username"`
+	Timestamp      pgtype.Timestamp `json:"timestamp"`
+	Ciphertext     []byte           `json:"ciphertext"`
+	MessageType    MessageType      `json:"message_type"`
+	MsgNonce       []byte           `json:"msg_nonce"`
+	KeyEnvelopes   []byte           `json:"key_envelopes"`
 }
 
 func (q *Queries) GetRelevantMessages(ctx context.Context, id uuid.UUID) ([]GetRelevantMessagesRow, error) {
@@ -248,6 +250,7 @@ func (q *Queries) GetRelevantMessages(ctx context.Context, id uuid.UUID) ([]GetR
 			&i.ID,
 			&i.GroupID,
 			&i.SenderID,
+			&i.SenderUsername,
 			&i.Timestamp,
 			&i.Ciphertext,
 			&i.MessageType,

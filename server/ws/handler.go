@@ -867,14 +867,15 @@ func (h *Handler) GetRelevantMessages(c *gin.Context) {
 		}
 
 		messagesToClient = append(messagesToClient, RawMessageE2EE{
-			ID:          dbMsg.ID,
-			GroupID:     *groupID,
-			SenderID:    *senderID,
-			MsgNonce:    base64.StdEncoding.EncodeToString(dbMsg.MsgNonce),
-			Ciphertext:  base64.StdEncoding.EncodeToString(dbMsg.Ciphertext),
-			MessageType: dbMsg.MessageType,
-			Timestamp:   dbMsg.Timestamp.Time.Format(time.RFC3339Nano),
-			Envelopes:   envelopes,
+			ID:             dbMsg.ID,
+			GroupID:        *groupID,
+			SenderID:       *senderID,
+			SenderUsername: dbMsg.SenderUsername,
+			MsgNonce:       base64.StdEncoding.EncodeToString(dbMsg.MsgNonce),
+			Ciphertext:     base64.StdEncoding.EncodeToString(dbMsg.Ciphertext),
+			MessageType:    dbMsg.MessageType,
+			Timestamp:      dbMsg.Timestamp.Time.Format(time.RFC3339Nano),
+			Envelopes:      envelopes,
 		})
 	}
 	c.JSON(http.StatusOK, messagesToClient)
