@@ -18,7 +18,7 @@ import { AppState, AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
-import { CanceledError } from "axios";
+
 
 interface WebSocketContextType {
   sendMessage: (packet: RawMessage) => void;
@@ -437,27 +437,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const getGroups = useCallback(async (): Promise<Group[]> => {
-    return http
-      .get(`${httpBaseURL}/get-groups`)
-      .then((response) => response.data as Group[])
-      .catch((error) => {
-        if (!(error instanceof CanceledError)) {
-          console.error("Error loading groups:", error);
-        }
-        return [];
-      });
+    const response = await http.get(`${httpBaseURL}/get-groups`);
+    return response.data as Group[];
   }, []);
 
   const getUsers = useCallback(async (): Promise<User[]> => {
-    return http
-      .get(`${httpBaseURL}/relevant-users`)
-      .then((response) => response.data)
-      .catch((error) => {
-        if (!(error instanceof CanceledError)) {
-          console.error("Error loading relevant users:", error);
-        }
-        return [];
-      });
+    const response = await http.get(`${httpBaseURL}/relevant-users`);
+    return response.data as User[];
   }, []);
 
   const sendMessage = useCallback(
