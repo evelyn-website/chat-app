@@ -63,6 +63,8 @@ describe('WebSocketContext', () => {
       expect(result.current).toHaveProperty('sendMessage');
       expect(result.current).toHaveProperty('connected');
       expect(result.current).toHaveProperty('onMessage');
+      expect(result.current).toHaveProperty('onGroupEvent');
+      expect(result.current).toHaveProperty('removeGroupEventHandler');
       expect(result.current).toHaveProperty('establishConnection');
       expect(result.current).toHaveProperty('disconnect');
     });
@@ -189,6 +191,202 @@ describe('WebSocketContext', () => {
 
       // No reconnection triggered since wasConnected was always true
       // (no false→true transition)
+    });
+  });
+
+  describe('Group event handling', () => {
+    it('should provide onGroupEvent function', () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      expect(typeof result.current.onGroupEvent).toBe('function');
+    });
+
+    it('should provide removeGroupEventHandler function', () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      expect(typeof result.current.removeGroupEventHandler).toBe('function');
+    });
+
+    it('should route group_event messages to event handlers, not message handlers', async () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      const eventHandler = jest.fn();
+      const messageHandler = jest.fn();
+
+      act(() => {
+        result.current.onGroupEvent(eventHandler);
+        result.current.onMessage(messageHandler);
+      });
+
+      // Establish a connection so we have an authenticated WS
+      let connectPromise: Promise<void>;
+      await act(async () => {
+        connectPromise = result.current.establishConnection();
+      });
+
+      // Simulate auth flow on the mock WS
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      await act(async () => {
+        ws.readyState = MockWebSocket.OPEN;
+        ws.onopen?.();
+      });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+      });
+      await act(async () => {
+        await connectPromise;
+      });
+
+      // Now send a group_event message
+      await act(async () => {
+        ws.onmessage?.({
+          data: JSON.stringify({
+            type: 'group_event',
+            event: 'user_invited',
+            group_id: 'test-group-123',
+          }),
+        } as MessageEvent);
+      });
+
+      expect(eventHandler).toHaveBeenCalledWith({
+        type: 'group_event',
+        event: 'user_invited',
+        group_id: 'test-group-123',
+      });
+      expect(messageHandler).not.toHaveBeenCalled();
+    });
+
+    it('should still route chat messages to message handlers after adding event handling', async () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      const eventHandler = jest.fn();
+      const messageHandler = jest.fn();
+
+      act(() => {
+        result.current.onGroupEvent(eventHandler);
+        result.current.onMessage(messageHandler);
+      });
+
+      // Establish connection
+      let connectPromise: Promise<void>;
+      await act(async () => {
+        connectPromise = result.current.establishConnection();
+      });
+
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      await act(async () => {
+        ws.readyState = MockWebSocket.OPEN;
+        ws.onopen?.();
+      });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+      });
+      await act(async () => {
+        await connectPromise;
+      });
+
+      // Send a regular chat message
+      const chatMessage = {
+        id: 'msg-1',
+        group_id: 'group-1',
+        sender_id: 'user-1',
+        ciphertext: 'encrypted-data',
+        envelopes: [{ deviceId: 'd1', ephPubKey: 'k1', keyNonce: 'n1', sealedKey: 's1' }],
+        msgNonce: 'nonce-1',
+        messageType: 'text',
+        timestamp: new Date().toISOString(),
+      };
+
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify(chatMessage) } as MessageEvent);
+      });
+
+      expect(messageHandler).toHaveBeenCalledTimes(1);
+      expect(eventHandler).not.toHaveBeenCalled();
+    });
+
+    it('should handle malformed group events gracefully', async () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const eventHandler = jest.fn();
+      act(() => {
+        result.current.onGroupEvent(eventHandler);
+      });
+
+      // Establish connection
+      let connectPromise: Promise<void>;
+      await act(async () => {
+        connectPromise = result.current.establishConnection();
+      });
+
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      await act(async () => {
+        ws.readyState = MockWebSocket.OPEN;
+        ws.onopen?.();
+      });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+      });
+      await act(async () => {
+        await connectPromise;
+      });
+
+      // Send malformed group event (missing group_id)
+      await act(async () => {
+        ws.onmessage?.({
+          data: JSON.stringify({ type: 'group_event', event: 'user_invited' }),
+        } as MessageEvent);
+      });
+
+      // Should not be routed to event handler since group_id is missing
+      expect(eventHandler).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should unregister event handler via removeGroupEventHandler', async () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      const eventHandler = jest.fn();
+      act(() => {
+        result.current.onGroupEvent(eventHandler);
+      });
+      act(() => {
+        result.current.removeGroupEventHandler(eventHandler);
+      });
+
+      // Establish connection
+      let connectPromise: Promise<void>;
+      await act(async () => {
+        connectPromise = result.current.establishConnection();
+      });
+
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      await act(async () => {
+        ws.readyState = MockWebSocket.OPEN;
+        ws.onopen?.();
+      });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+      });
+      await act(async () => {
+        await connectPromise;
+      });
+
+      // Send a group event
+      await act(async () => {
+        ws.onmessage?.({
+          data: JSON.stringify({
+            type: 'group_event',
+            event: 'group_updated',
+            group_id: 'test-group-456',
+          }),
+        } as MessageEvent);
+      });
+
+      // Handler was removed, so it should not have been called
+      expect(eventHandler).not.toHaveBeenCalled();
     });
   });
 

@@ -197,14 +197,14 @@ func (h *Hub) listenPubSub() {
 					log.Printf("Error decoding user_added_to_group payload: %v", err)
 					continue
 				}
-				h.handleUserAddedToGroupEvent(payload.UserID, payload.GroupID)
+				h.handleUserAddedToGroupEvent(payload.UserID, payload.GroupID, pubSubMsg.OriginServerID)
 			case "user_removed_from_group":
 				var payload UserGroupEventPayload
 				if err := mapToStruct(pubSubMsg.Payload, &payload); err != nil {
 					log.Printf("Error decoding user_removed_from_group payload: %v", err)
 					continue
 				}
-				h.handleUserRemovedFromGroupEvent(payload.UserID, payload.GroupID)
+				h.handleUserRemovedFromGroupEvent(payload.UserID, payload.GroupID, pubSubMsg.OriginServerID)
 			case "group_created":
 				var payload GroupEventPayload
 				if err := mapToStruct(pubSubMsg.Payload, &payload); err != nil {
@@ -218,14 +218,14 @@ func (h *Hub) listenPubSub() {
 					log.Printf("Error decoding group_deleted payload: %v", err)
 					continue
 				}
-				h.handleGroupDeletedEvent(payload.GroupID)
+				h.handleGroupDeletedEvent(payload.GroupID, pubSubMsg.OriginServerID)
 			case "group_updated":
 				var payload GroupUpdateEventPayload
 				if err := mapToStruct(pubSubMsg.Payload, &payload); err != nil {
 					log.Printf("Hub %s: Error decoding group_updated payload: %v", h.serverID, err)
 					continue
 				}
-				h.handleGroupUpdatedEvent(payload.GroupID, payload.Name)
+				h.handleGroupUpdatedEvent(payload.GroupID, payload.Name, pubSubMsg.OriginServerID)
 			}
 		}
 	}
@@ -321,7 +321,10 @@ func (h *Hub) deliverChatMessage(message *RawMessageE2EE) {
 	}
 }
 
-func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID) {
+// handleUserAddedToGroupEvent is called from Redis PubSub when any server instance adds a user to a group.
+// The originServerID check prevents duplicate event delivery: the originating server already sent the
+// event directly to the client in Run(), so we only forward here for clients on other server instances.
+func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -330,15 +333,31 @@ func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID) {
 		client.AddGroup(groupID)
 		h.addClientToLocalGroupStructLocked(client, groupID)
 		log.Printf("Hub %s: Updated local state for user %s added to group %s", h.serverID, userID.String(), groupID.String())
+		if originServerID != h.serverID {
+			select {
+			case client.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: groupID}:
+			default:
+				log.Printf("Hub %s: Events channel full for client %s on user_invited for group %s", h.serverID, userID.String(), groupID.String())
+			}
+		}
 	}
 }
 
-func (h *Hub) handleUserRemovedFromGroupEvent(userID uuid.UUID, groupID uuid.UUID) {
+// handleUserRemovedFromGroupEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
+func (h *Hub) handleUserRemovedFromGroupEvent(userID uuid.UUID, groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	client, clientConnectedToThisInstance := h.Clients[userID]
 	if clientConnectedToThisInstance {
+		if originServerID != h.serverID {
+			select {
+			case client.Events <- &ClientEvent{Type: "group_event", Event: "user_removed", GroupID: groupID}:
+			default:
+				log.Printf("Hub %s: Events channel full for client %s on user_removed for group %s", h.serverID, userID.String(), groupID.String())
+			}
+		}
 		h.removeClientFromLocalGroupStructLocked(client, groupID)
 		client.RemoveGroup(groupID)
 		log.Printf("Hub %s: Updated local state for user %s removed from group %s", h.serverID, userID.String(), groupID.String())
@@ -372,13 +391,22 @@ func (h *Hub) handleGroupCreatedEvent(groupID uuid.UUID, name string, adminID uu
 	}
 }
 
-func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID) {
+// handleGroupDeletedEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
+func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	if group, exists := h.Groups[groupID]; exists {
 		group.mutex.Lock()
 		for clientID, client := range group.Clients {
+			if originServerID != h.serverID {
+				select {
+				case client.Events <- &ClientEvent{Type: "group_event", Event: "group_deleted", GroupID: groupID}:
+				default:
+					log.Printf("Hub %s: Events channel full for client %s on group_deleted for group %s", h.serverID, clientID.String(), groupID.String())
+				}
+			}
 			client.RemoveGroup(groupID)
 			log.Printf("Hub %s: Client %s removed from local cache of deleted group %s", h.serverID, clientID.String(), groupID.String())
 		}
@@ -388,7 +416,9 @@ func (h *Hub) handleGroupDeletedEvent(groupID uuid.UUID) {
 	}
 }
 
-func (h *Hub) handleGroupUpdatedEvent(groupID uuid.UUID, newName string) {
+// handleGroupUpdatedEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
+// for the originServerID dedup pattern.
+func (h *Hub) handleGroupUpdatedEvent(groupID uuid.UUID, newName string, originServerID string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -397,6 +427,17 @@ func (h *Hub) handleGroupUpdatedEvent(groupID uuid.UUID, newName string) {
 			oldName := group.Name
 			group.Name = newName
 			log.Printf("Hub %s: Updated local cache for group %s name from '%s' to '%s'", h.serverID, groupID.String(), oldName, newName)
+		}
+		if originServerID != h.serverID {
+			group.mutex.RLock()
+			for _, client := range group.Clients {
+				select {
+				case client.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: groupID}:
+				default:
+					log.Printf("Hub %s: Events channel full for client %s on group_updated for group %s", h.serverID, client.User.ID.String(), groupID.String())
+				}
+			}
+			group.mutex.RUnlock()
 		}
 	} else {
 		log.Printf("Hub %s: Received group_updated event for group %s not in local cache.", h.serverID, groupID.String())
@@ -487,6 +528,7 @@ func (h *Hub) Run() {
 				}
 				client.mutex.RUnlock()
 				close(client.Message)
+				close(client.Events)
 				log.Printf("Hub %s: Client %s unregistered locally.", h.serverID, client.User.ID.String())
 			}
 			h.mutex.Unlock()
@@ -594,6 +636,16 @@ func (h *Hub) Run() {
 				} else {
 					h.redisClient.Publish(h.ctx, pubSubGroupEventsChannel, serializedEvt)
 				}
+				// Forward event to locally connected client after Redis confirmation
+				h.mutex.RLock()
+				if client, ok := h.Clients[removeMsg.UserID]; ok {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "user_removed", GroupID: removeMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on user_removed (direct) for group %s", h.serverID, removeMsg.UserID.String(), removeMsg.GroupID.String())
+					}
+				}
+				h.mutex.RUnlock()
 			}
 
 		case addMsg := <-h.AddUserToGroupChan:
@@ -617,6 +669,16 @@ func (h *Hub) Run() {
 				} else {
 					h.redisClient.Publish(h.ctx, pubSubGroupEventsChannel, serializedEvt)
 				}
+				// Forward event to locally connected client
+				h.mutex.RLock()
+				if client, ok := h.Clients[addMsg.UserID]; ok {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: addMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on user_invited (direct) for group %s", h.serverID, addMsg.UserID.String(), addMsg.GroupID.String())
+					}
+				}
+				h.mutex.RUnlock()
 			}
 
 		case initMsg := <-h.InitializeGroupChan:
@@ -674,6 +736,20 @@ func (h *Hub) Run() {
 				} else {
 					h.redisClient.Publish(h.ctx, pubSubGroupEventsChannel, serializedEvt)
 				}
+				// Forward group_deleted event to locally connected group members after Redis confirmation
+				h.mutex.RLock()
+				if group, exists := h.Groups[delMsg.GroupID]; exists {
+					group.mutex.RLock()
+					for _, client := range group.Clients {
+						select {
+						case client.Events <- &ClientEvent{Type: "group_event", Event: "group_deleted", GroupID: delMsg.GroupID}:
+						default:
+							log.Printf("Hub %s: Events channel full for client %s on group_deleted (direct) for group %s", h.serverID, client.User.ID.String(), groupIDStr)
+						}
+					}
+					group.mutex.RUnlock()
+				}
+				h.mutex.RUnlock()
 			}
 		case updateMsg := <-h.UpdateGroupInfoChan:
 			log.Printf("Hub %s: Received request to process group info update for group %s", h.serverID, updateMsg.GroupID.String())
@@ -687,6 +763,21 @@ func (h *Hub) Run() {
 					log.Printf("Hub %s: Updated group name in Redis for group %s to '%s'", h.serverID, updateMsg.GroupID.String(), updateMsg.Name)
 				}
 			}
+
+			// Forward group_updated event to locally connected group members
+			h.mutex.RLock()
+			if group, exists := h.Groups[updateMsg.GroupID]; exists {
+				group.mutex.RLock()
+				for _, client := range group.Clients {
+					select {
+					case client.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: updateMsg.GroupID}:
+					default:
+						log.Printf("Hub %s: Events channel full for client %s on group_updated (direct) for group %s", h.serverID, client.User.ID.String(), updateMsg.GroupID.String())
+					}
+				}
+				group.mutex.RUnlock()
+			}
+			h.mutex.RUnlock()
 
 			pubSubEvt := PubSubMessage{
 				Type:           "group_updated",

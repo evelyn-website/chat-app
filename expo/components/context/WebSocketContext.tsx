@@ -4,6 +4,7 @@ import {
   User,
   UpdateGroupParams,
   CreateGroupParams,
+  GroupEvent,
 } from "@/types/types";
 import React, {
   createContext,
@@ -17,13 +18,15 @@ import { AppState, AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
-import { CanceledError } from "axios";
+
 
 interface WebSocketContextType {
   sendMessage: (packet: RawMessage) => void;
   connected: boolean;
   onMessage: (callback: (packet: RawMessage) => void) => void;
   removeMessageHandler: (callback: (packet: RawMessage) => void) => void;
+  onGroupEvent: (callback: (event: GroupEvent) => void) => void;
+  removeGroupEventHandler: (callback: (event: GroupEvent) => void) => void;
   establishConnection: () => Promise<void>;
   disconnect: () => void;
   createGroup: (
@@ -67,6 +70,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const socketRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const messageHandlersRef = useRef<((packet: RawMessage) => void)[]>([]);
+  const groupEventHandlersRef = useRef<((event: GroupEvent) => void)[]>([]);
   const isReconnecting = useRef(false);
   const preventRetriesRef = useRef(false);
   const appState = useRef(AppState.currentState);
@@ -277,6 +281,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
               }
             } else {
               if (
+                parsedData.type === "group_event" &&
+                parsedData.event &&
+                parsedData.group_id
+              ) {
+                groupEventHandlersRef.current.forEach((handler) => {
+                  try {
+                    handler(parsedData as GroupEvent);
+                  } catch (handlerError) {
+                    console.error("Error in group event handler:", handlerError);
+                  }
+                });
+              } else if (
                 parsedData.group_id &&
                 parsedData.ciphertext &&
                 parsedData.envelopes &&
@@ -421,27 +437,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const getGroups = useCallback(async (): Promise<Group[]> => {
-    return http
-      .get(`${httpBaseURL}/get-groups`)
-      .then((response) => response.data as Group[])
-      .catch((error) => {
-        if (!(error instanceof CanceledError)) {
-          console.error("Error loading groups:", error);
-        }
-        return [];
-      });
+    const response = await http.get(`${httpBaseURL}/get-groups`);
+    return response.data as Group[];
   }, []);
 
   const getUsers = useCallback(async (): Promise<User[]> => {
-    return http
-      .get(`${httpBaseURL}/relevant-users`)
-      .then((response) => response.data)
-      .catch((error) => {
-        if (!(error instanceof CanceledError)) {
-          console.error("Error loading relevant users:", error);
-        }
-        return [];
-      });
+    const response = await http.get(`${httpBaseURL}/relevant-users`);
+    return response.data as User[];
   }, []);
 
   const sendMessage = useCallback(
@@ -471,6 +473,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const removeMessageHandler = useCallback(
     (callback: (packet: RawMessage) => void) => {
       messageHandlersRef.current = messageHandlersRef.current.filter(
+        (h) => h !== callback,
+      );
+    },
+    [],
+  );
+
+  const onGroupEvent = useCallback((callback: (event: GroupEvent) => void) => {
+    if (!groupEventHandlersRef.current.includes(callback)) {
+      groupEventHandlersRef.current = [...groupEventHandlersRef.current, callback];
+    }
+  }, []);
+
+  const removeGroupEventHandler = useCallback(
+    (callback: (event: GroupEvent) => void) => {
+      groupEventHandlersRef.current = groupEventHandlersRef.current.filter(
         (h) => h !== callback,
       );
     },
@@ -584,6 +601,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         connected,
         onMessage,
         removeMessageHandler,
+        onGroupEvent,
+        removeGroupEventHandler,
         establishConnection,
         disconnect,
         createGroup,

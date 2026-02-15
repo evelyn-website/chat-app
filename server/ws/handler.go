@@ -605,28 +605,26 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 		)
 	}
 
-	if req.Name != nil {
-		updatePayload := &GroupUpdateEventPayload{
-			GroupID: fullGroupData.ID,
-			Name:    fullGroupData.Name,
-		}
-		select {
-		case h.hub.UpdateGroupInfoChan <- updatePayload:
-			log.Printf(
-				"Sent request to hub to process group info update for group %d",
-				fullGroupData.ID,
-			)
-		case <-ctx.Done():
-			log.Printf(
-				"Context cancelled while trying to send UpdateGroupInfoChan for group %d",
-				fullGroupData.ID,
-			)
-		default:
-			log.Printf(
-				"Warning: Hub UpdateGroupInfoChan full for group %d. Update might be delayed or dropped.",
-				fullGroupData.ID,
-			)
-		}
+	updatePayload := &GroupUpdateEventPayload{
+		GroupID: fullGroupData.ID,
+		Name:    fullGroupData.Name,
+	}
+	select {
+	case h.hub.UpdateGroupInfoChan <- updatePayload:
+		log.Printf(
+			"Sent request to hub to process group info update for group %d",
+			fullGroupData.ID,
+		)
+	case <-ctx.Done():
+		log.Printf(
+			"Context cancelled while trying to send UpdateGroupInfoChan for group %d",
+			fullGroupData.ID,
+		)
+	default:
+		log.Printf(
+			"Warning: Hub UpdateGroupInfoChan full for group %d. Update might be delayed or dropped.",
+			fullGroupData.ID,
+		)
 	}
 
 	c.JSON(http.StatusOK, UpdateGroupResponse{Group: responseClientGroup})

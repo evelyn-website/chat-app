@@ -3,16 +3,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { useAuthUtils } from "@/components/context/AuthUtilsContext";
 import { User } from "@/types/types";
+import { useGroupEventHandler } from "@/hooks/useGroupEventHandler";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
-import { CanceledError, isCancel } from "axios";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
 
 const AppLayout = () => {
   const { whoami } = useAuthUtils();
-  const { getGroups, getUsers, connected: wsConnected } = useWebSocket();
+  const { getGroups, getUsers, connected: wsConnected, onGroupEvent, removeGroupEventHandler } = useWebSocket();
   const {
     store,
     deviceId,
@@ -60,20 +60,23 @@ const AppLayout = () => {
     if (isFetchingGroups.current || !user) return;
     isFetchingGroups.current = true;
     try {
-      // Prune locally-expired groups before fetching
-      const expiredIds = await store.deleteExpiredGroups();
-      for (const groupId of expiredIds) {
-        removeGroupMessages(groupId);
-      }
-
+      // Snapshot local groups before saveGroups prunes them from SQLite
+      const localGroups = await store.loadGroups();
       const data = await getGroups();
       await store.saveGroups(data);
+
+      // Clean up in-memory messages for groups the server no longer returns
+      const serverGroupIds = new Set(data.map((g) => g.id));
+      for (const lg of localGroups) {
+        if (!serverGroupIds.has(lg.id)) {
+          removeGroupMessages(lg.id);
+        }
+      }
+
       refreshGroups();
     } catch (error) {
-      if (isCancel(error) || error instanceof CanceledError) {
-        console.error("Failed to fetch/store groups:", error);
-        await store.loadGroups();
-      }
+      console.error("Failed to fetch/store groups:", error);
+      refreshGroups();
     } finally {
       isFetchingGroups.current = false;
     }
@@ -88,10 +91,7 @@ const AppLayout = () => {
       await store.saveUsers(data);
       refreshUsers();
     } catch (error) {
-      if (isCancel(error) || error instanceof CanceledError) {
-        console.error("Failed to fetch/store users:", error);
-        await store.loadUsers();
-      }
+      console.error("Failed to fetch/store users:", error);
     } finally {
       isFetchingUsers.current = false;
     }
@@ -104,16 +104,23 @@ const AppLayout = () => {
     try {
       await loadRelevantDeviceKeys();
     } catch (error) {
-      if (isCancel(error) || error instanceof CanceledError) {
-        console.error(
-          "AppLayout: Error explicitly calling fetchDeviceKeys:",
-          error
-        );
-      }
+      console.error("AppLayout: Error calling fetchDeviceKeys:", error);
     } finally {
       isFetchingDeviceKeys.current = false;
     }
   }, [user, loadRelevantDeviceKeys]);
+
+  const handleGroupEvent = useGroupEventHandler(fetchGroups, fetchDeviceKeys);
+
+  useEffect(() => {
+    if (user) {
+      onGroupEvent(handleGroupEvent);
+      return () => {
+        removeGroupEventHandler(handleGroupEvent);
+      };
+    }
+    return undefined;
+  }, [user, onGroupEvent, removeGroupEventHandler, handleGroupEvent]);
 
   const POLL_INTERVAL = 60000;
 

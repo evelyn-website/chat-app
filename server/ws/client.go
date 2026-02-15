@@ -17,6 +17,7 @@ import (
 type Client struct {
 	conn    *websocket.Conn
 	Message chan *RawMessageE2EE
+	Events  chan *ClientEvent
 	Groups  map[uuid.UUID]bool
 	User    *db.GetUserByIdRow `json:"user"`
 	mutex   sync.RWMutex
@@ -36,6 +37,7 @@ func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow) *Client {
 	return &Client{
 		conn:    conn,
 		Message: make(chan *RawMessageE2EE, 10),
+		Events:  make(chan *ClientEvent, 20),
 		Groups:  make(map[uuid.UUID]bool),
 		User:    user,
 		ctx:     ctx,
@@ -78,6 +80,18 @@ func (c *Client) WriteMessage() {
 			err := c.conn.WriteJSON(message)
 			if err != nil {
 				log.Printf("Error writing JSON (E2EE) for client %d (%s): %v", c.User.ID, c.User.Username, err)
+				return
+			}
+		case event, ok := <-c.Events:
+			if !ok {
+				return
+			}
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Printf("Client %d (%s): Error setting write deadline for event: %v", c.User.ID, c.User.Username, err)
+				return
+			}
+			if err := c.conn.WriteJSON(event); err != nil {
+				log.Printf("Error writing event JSON for client %d (%s): %v", c.User.ID, c.User.Username, err)
 				return
 			}
 		case <-ticker.C:
