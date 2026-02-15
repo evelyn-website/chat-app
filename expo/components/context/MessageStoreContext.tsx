@@ -273,7 +273,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         });
         dispatch({ type: "SET_ERROR", payload: null });
 
-        setTimeout(() => refreshGroups(), 100);
+        refreshGroups();
       } catch (error) {
         if (!(error instanceof CanceledError)) {
           console.error(
