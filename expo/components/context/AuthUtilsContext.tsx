@@ -1,7 +1,7 @@
 import { User } from "@/types/types";
 import http from "@/util/custom-axios";
 import { save, clear } from "@/util/custom-store";
-import axios, { CanceledError } from "axios";
+import axios, { CanceledError, isAxiosError } from "axios";
 import React, { createContext, useContext, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGlobalStore } from "./GlobalStoreContext";
@@ -45,10 +45,21 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
     try {
       const pendingCode = await AsyncStorage.getItem("pendingInviteCode");
       if (pendingCode) {
-        const result = await acceptInvite(pendingCode);
-        await AsyncStorage.removeItem("pendingInviteCode");
-        if (result.group_id) {
-          refreshGroups();
+        try {
+          const result = await acceptInvite(pendingCode);
+          await AsyncStorage.removeItem("pendingInviteCode");
+          if (result.group_id) {
+            refreshGroups();
+          }
+        } catch (error) {
+          if (isAxiosError(error)) {
+            const status = error.response?.status;
+            // Terminal invite failures should not retry on every login.
+            if (status === 403 || status === 404 || status === 410) {
+              await AsyncStorage.removeItem("pendingInviteCode");
+            }
+          }
+          throw error;
         }
       }
     } catch (error) {
