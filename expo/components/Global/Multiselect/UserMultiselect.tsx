@@ -65,7 +65,7 @@ const UserMultiSelect = (props: {
 
   return (
     <View className="w-full">
-      <View className="min-h-[60px] max-h-28 mb-2 bg-gray-700 rounded-lg p-2">
+      <View className="min-h-[60px] max-h-28 mb-2 bg-black/20 border border-white/10 rounded-xl p-2">
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
@@ -81,12 +81,12 @@ const UserMultiSelect = (props: {
               <View key={tagEmail} className="m-1">
                 <Pressable
                   onPress={() => handleRemoveTag(tagEmail)}
-                  className="flex-row items-center p-2 px-3 rounded-full bg-blue-600 active:bg-blue-700"
+                  className="flex-row items-center p-2 px-3 rounded-full bg-blue-500/90 active:bg-blue-500"
                 >
                   <Text numberOfLines={1} className="text-white max-w-[150px]">
                     {displayTag}
                   </Text>
-                  <View className="ml-2 h-5 w-5 rounded-full bg-blue-700 items-center justify-center">
+                  <View className="ml-2 h-5 w-5 rounded-full bg-blue-700/80 items-center justify-center">
                     <Text className="text-white text-xs">×</Text>
                   </View>
                 </Pressable>
@@ -94,7 +94,7 @@ const UserMultiSelect = (props: {
             );
           })}
           {tags.length === 0 && (
-            <Text className="text-gray-400 p-2">No users selected.</Text>
+            <Text className="text-zinc-400 p-2">No users selected.</Text>
           )}
         </ScrollView>
       </View>
@@ -103,7 +103,7 @@ const UserMultiSelect = (props: {
         <TextInput
           placeholder={placeholderText}
           ref={inputRef}
-          className="h-12 w-full border border-gray-600 rounded-lg bg-gray-700 text-white px-3"
+          className="h-12 w-full border border-white/10 rounded-xl bg-black/20 text-white px-3"
           placeholderTextColor="#9CA3AF"
           onSubmitEditing={() => handleSelectUser(currentText)}
           onChangeText={onSearchTextChange}
@@ -113,7 +113,7 @@ const UserMultiSelect = (props: {
 
         {currentText && (
           <View
-            className="absolute max-h-40 w-full top-[100%] bg-gray-700 z-50 rounded-lg mt-1 border border-gray-600 shadow-lg"
+            className="absolute max-h-40 w-full top-[100%] bg-zinc-900 z-50 rounded-xl mt-1 border border-white/10"
             style={{ elevation: 5 }}
           >
             <ScrollView keyboardShouldPersistTaps="always">
@@ -122,19 +122,19 @@ const UserMultiSelect = (props: {
                   <Pressable
                     key={option.id}
                     onPress={() => handleSelectUser(option.email)}
-                    className="p-3 border-b border-gray-600 active:bg-gray-600"
+                    className="p-3 border-b border-white/10 active:bg-white/5"
                   >
                     <Text className="text-white font-medium">
                       {option.username}
                     </Text>
-                    <Text className="text-sm text-gray-400">
+                    <Text className="text-sm text-zinc-400">
                       {option.email}
                     </Text>
                   </Pressable>
                 ))
               ) : (
                 <View className="p-3 items-center">
-                  <Text className="text-gray-400">No users found.</Text>
+                  <Text className="text-zinc-400">No users found.</Text>
                 </View>
               )}
             </ScrollView>

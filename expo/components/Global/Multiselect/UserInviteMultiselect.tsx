@@ -54,11 +54,11 @@ export default function UserInviteMultiselect({
   if (contacts === null && isLoading) {
     return (
       <View
-        className="w-full h-32 bg-gray-800 rounded-lg p-3 
+        className="w-full h-32 bg-black/20 border border-white/10 rounded-xl p-3 
                        justify-center items-center"
       >
         <ActivityIndicator size="small" color="#9CA3AF" />
-        <Text className="text-gray-400 mt-2">Loading contacts…</Text>
+        <Text className="text-zinc-400 mt-2">Loading contacts...</Text>
       </View>
     );
   }
@@ -66,7 +66,7 @@ export default function UserInviteMultiselect({
   if (contacts === null && error) {
     return (
       <View
-        className="w-full h-32 bg-gray-800 rounded-lg p-3 
+        className="w-full h-32 bg-black/20 border border-white/10 rounded-xl p-3 
                        justify-center items-center"
       >
         <Ionicons name="warning-outline" size={24} color="#F87171" />
@@ -80,7 +80,7 @@ export default function UserInviteMultiselect({
       {isLoading && (
         <View
           className="absolute inset-0 justify-center 
-                           items-center bg-gray-800/50 rounded-lg"
+                           items-center bg-black/40 rounded-xl"
         >
           <ActivityIndicator size="small" color="#9CA3AF" />
         </View>

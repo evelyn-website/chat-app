@@ -260,7 +260,6 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
         </View>
 
         <View className="pb-4 mb-4 border-b border-white/10">
-          <Text className={sectionTitleClassName}>Optional Details</Text>
           <View className="mb-3">
             <Pressable
               onPress={() => setShowDescriptionInput(!showDescriptionInput)}
@@ -268,7 +267,9 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
             >
               <View className="flex-row items-center">
                 <Ionicons name="document-text-outline" size={16} color="#a1a1aa" />
-                <Text className="text-sm text-zinc-200 ml-2">Description</Text>
+                <Text className="text-sm text-zinc-200 ml-2">
+                  Description (optional)
+                </Text>
               </View>
               <Text className="text-blue-200 text-sm">
                 {showDescriptionInput ? "Hide" : description ? "Edit" : "Add"}
@@ -279,7 +280,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
                 className={`${inputClassName} h-24`}
                 onChangeText={setDescription}
                 value={description}
-                placeholder="Add a description (optional)"
+                placeholder="Add a description"
                 placeholderTextColor="#9CA3AF"
                 multiline
                 textAlignVertical="top"
@@ -298,7 +299,9 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
             >
               <View className="flex-row items-center">
                 <Ionicons name="location-outline" size={16} color="#a1a1aa" />
-                <Text className="text-sm text-zinc-200 ml-2">Location</Text>
+                <Text className="text-sm text-zinc-200 ml-2">
+                  Location (optional)
+                </Text>
               </View>
               <Text className="text-blue-200 text-sm">
                 {showLocationInput ? "Hide" : location ? "Edit" : "Add"}
@@ -309,7 +312,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
                 className={inputClassName}
                 onChangeText={setLocation}
                 value={location}
-                placeholder="Add a location (optional)"
+                placeholder="Add a location"
                 placeholderTextColor="#9CA3AF"
               />
             )}
@@ -321,9 +324,17 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
           </View>
         </View>
 
-        <View className="z-50 overflow-visible">
-          <Text className={sectionTitleClassName}>Invite Friends</Text>
-          <View className="z-40 bg-black/20 rounded-xl p-3 border border-white/10 overflow-visible">
+        <View className="z-50 overflow-visible pt-1">
+          <Text className={sectionTitleClassName}>
+            Invite Friends
+            {usersToInvite.length > 0
+              ? ` (${usersToInvite.length} selected)`
+              : " (optional)"}
+          </Text>
+          <Text className="text-xs text-zinc-400 mb-2">
+            Invite now or skip and add people later.
+          </Text>
+          <View className="z-40 rounded-xl overflow-visible">
             <UserInviteMultiselect
               placeholderText="Select friends to invite"
               userList={usersToInvite}
@@ -335,7 +346,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
       </View>
 
       {/* Create Button */}
-      <View className="z-10 mt-4 mb-4">
+      <View className="z-10 mt-5 mb-4">
         <Button
           variant="primary"
           size="lg"

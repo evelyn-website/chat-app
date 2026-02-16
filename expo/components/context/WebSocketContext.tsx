@@ -501,14 +501,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
       groupId: string,
       maxUses?: number,
     ): Promise<CreateInviteResponse> => {
-      const response = await http.post(
-        `${process.env.EXPO_PUBLIC_HOST}/api/invites`,
-        {
+      try {
+        const host = process.env.EXPO_PUBLIC_HOST ?? "";
+        const baseURL = host.startsWith("http") ? host : `http://${host}`;
+        const response = await http.post(`${baseURL}/api/invites`, {
           group_id: groupId,
           max_uses: maxUses ?? 0,
-        },
-      );
-      return response.data as CreateInviteResponse;
+        });
+        return response.data as CreateInviteResponse;
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { error?: string } } })
+          ?.response?.data?.error;
+        throw new Error(msg ?? "Could not generate invite link");
+      }
     },
     [],
   );

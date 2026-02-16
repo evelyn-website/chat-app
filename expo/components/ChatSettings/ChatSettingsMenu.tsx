@@ -239,7 +239,9 @@ const ChatSettingsMenu = (props: {
       });
     } catch (error) {
       console.error("Error sharing invite link:", error);
-      Alert.alert("Error", "Could not generate invite link. Please try again.");
+      const message =
+        error instanceof Error ? error.message : "Could not generate invite link. Please try again.";
+      Alert.alert("Error", message);
     } finally {
       setIsGeneratingLink(false);
     }
