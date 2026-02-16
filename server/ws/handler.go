@@ -368,7 +368,10 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 	}
 
 	if len(usersToInvite) == 0 {
-		c.JSON(http.StatusOK, []db.UserGroup{})
+		c.JSON(http.StatusOK, gin.H{
+			"invites":       []db.UserGroup{},
+			"skipped_users": []string{},
+		})
 		return
 	}
 

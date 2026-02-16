@@ -17,7 +17,7 @@ export interface RecipientDevicePublicKey {
   publicKey: Uint8Array;
 }
 
-export type GroupAdminMap = Map<string, boolean>;
+export type GroupAdminMap = Record<string, boolean>;
 
 export type GroupUser = User & { admin: boolean; invited_at?: string };
 

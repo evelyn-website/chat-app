@@ -1368,7 +1368,7 @@ describe('Store', () => {
           email: 'test@example.com',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          group_admin_map: new Map(),
+          group_admin_map: {},
         },
       ];
 
@@ -1390,7 +1390,7 @@ describe('Store', () => {
           email: 'test@example.com',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          group_admin_map: new Map([['group-1', true], ['group-2', false]]) as any,
+          group_admin_map: { 'group-1': true, 'group-2': false },
         },
       ];
 
@@ -1412,7 +1412,7 @@ describe('Store', () => {
           email: 'test@example.com',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          group_admin_map: new Map(),
+          group_admin_map: {},
         },
       ];
 
@@ -1426,7 +1426,7 @@ describe('Store', () => {
         email: `user${i}@example.com`,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        group_admin_map: new Map(),
+        group_admin_map: {},
       }));
 
       await store.saveUsers(users);
