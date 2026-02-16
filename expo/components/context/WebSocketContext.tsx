@@ -5,6 +5,7 @@ import {
   UpdateGroupParams,
   CreateGroupParams,
   GroupEvent,
+  BlockedUser,
 } from "@/types/types";
 import React, {
   createContext,
@@ -49,6 +50,9 @@ interface WebSocketContextType {
   getGroups: () => Promise<Group[]>;
   getUsers: () => Promise<User[]>;
   toggleGroupMuted: (groupId: string) => Promise<{ muted: boolean } | undefined>;
+  blockUser: (userId: string) => Promise<{ removed_from_groups?: string[] }>;
+  unblockUser: (userId: string) => Promise<void>;
+  getBlockedUsers: () => Promise<BlockedUser[]>;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -461,6 +465,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  const blockUser = useCallback(
+    async (userId: string): Promise<{ removed_from_groups?: string[] }> => {
+      const response = await http.post(`${httpBaseURL}/block-user`, {
+        user_id: userId,
+      });
+      return response.data as { removed_from_groups?: string[] };
+    },
+    [],
+  );
+
+  const unblockUser = useCallback(async (userId: string): Promise<void> => {
+    await http.post(`${httpBaseURL}/unblock-user`, { user_id: userId });
+  }, []);
+
+  const getBlockedUsers = useCallback(async (): Promise<BlockedUser[]> => {
+    const response = await http.get(`${httpBaseURL}/blocked-users`);
+    return response.data as BlockedUser[];
+  }, []);
+
   const sendMessage = useCallback(
     (packet: RawMessage) => {
       const socket = socketRef.current;
@@ -628,6 +651,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         getGroups,
         getUsers,
         toggleGroupMuted,
+        blockUser,
+        unblockUser,
+        getBlockedUsers,
       }}
     >
       {children}

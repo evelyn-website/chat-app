@@ -172,6 +172,152 @@ func (h *Handler) EstablishConnection(c *gin.Context) {
 	log.Printf("EstablishConnection goroutine for client %s (%s) exiting.", client.User.ID.String(), client.User.Username)
 }
 
+func (h *Handler) BlockUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	blocker, err := util.GetUser(c, h.db)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found or unauthorized"})
+		return
+	}
+
+	var req BlockUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.UserID == blocker.ID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot block yourself"})
+		return
+	}
+
+	tx, err := h.conn.Begin(ctx)
+	if err != nil {
+		log.Printf("Failed to begin transaction for blocking user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start database operation"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := h.db.WithTx(tx)
+
+	_, err = qtx.BlockUser(ctx, db.BlockUserParams{
+		BlockerID: blocker.ID,
+		BlockedID: req.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// ON CONFLICT DO NOTHING — already blocked
+			c.JSON(http.StatusOK, gin.H{"message": "User already blocked", "removed_from_groups": []string{}})
+			return
+		}
+		log.Printf("Error blocking user %s by %s: %v", req.UserID, blocker.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to block user"})
+		return
+	}
+
+	sharedGroupIDs, err := qtx.GetSharedGroupIDs(ctx, db.GetSharedGroupIDsParams{
+		UserID:   &blocker.ID,
+		UserID_2: &req.UserID,
+	})
+	if err != nil {
+		log.Printf("Error getting shared groups between %s and %s: %v", blocker.ID, req.UserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve shared groups"})
+		return
+	}
+
+	var removedGroupIDs []uuid.UUID
+	for _, gid := range sharedGroupIDs {
+		if gid == nil {
+			continue
+		}
+		_, err := qtx.DeleteUserGroup(ctx, db.DeleteUserGroupParams{
+			UserID:  &req.UserID,
+			GroupID: gid,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			log.Printf("Error removing blocked user %s from group %s: %v", req.UserID, *gid, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove blocked user from shared groups"})
+			return
+		}
+		removedGroupIDs = append(removedGroupIDs, *gid)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		log.Printf("Failed to commit block user transaction: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to finalize block operation"})
+		return
+	}
+
+	for _, gid := range removedGroupIDs {
+		select {
+		case h.hub.RemoveUserFromGroupChan <- &RemoveClientFromGroupMsg{UserID: req.UserID, GroupID: gid}:
+			log.Printf("Sent hub removal for blocked user %s from group %s", req.UserID, gid)
+		case <-ctx.Done():
+			log.Printf("Context cancelled while sending RemoveUserFromGroupChan for user %s, group %s", req.UserID, gid)
+			return
+		default:
+			log.Printf("Warning: Hub RemoveUserFromGroupChan full for user %s group %s", req.UserID, gid)
+		}
+	}
+
+	removedGroupStrings := make([]string, len(removedGroupIDs))
+	for i, gid := range removedGroupIDs {
+		removedGroupStrings[i] = gid.String()
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "User blocked", "removed_from_groups": removedGroupStrings})
+}
+
+func (h *Handler) UnblockUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	user, err := util.GetUser(c, h.db)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found or unauthorized"})
+		return
+	}
+
+	var req UnblockUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.db.UnblockUser(ctx, db.UnblockUserParams{
+		BlockerID: user.ID,
+		BlockedID: req.UserID,
+	})
+	if err != nil {
+		log.Printf("Error unblocking user %s by %s: %v", req.UserID, user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unblock user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "User unblocked"})
+}
+
+func (h *Handler) GetBlockedUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	user, err := util.GetUser(c, h.db)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found or unauthorized"})
+		return
+	}
+
+	blockedUsers, err := h.db.GetBlockedUsers(ctx, user.ID)
+	if err != nil {
+		log.Printf("Error getting blocked users for %s: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve blocked users"})
+		return
+	}
+	if blockedUsers == nil {
+		blockedUsers = make([]db.GetBlockedUsersRow, 0)
+	}
+	c.JSON(http.StatusOK, blockedUsers)
+}
+
 func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 	ctx := c.Request.Context()
 	invitingUser, err := util.GetUser(c, h.db)
@@ -226,8 +372,24 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 	qtx := h.db.WithTx(tx)
 	var successfulInvites []db.UserGroup
 	var invitedUserIDs []uuid.UUID
+	var skippedUsers []string
 
 	for _, user := range usersToInvite {
+		hasConflict, err := qtx.CheckBlockConflictWithGroup(ctx, db.CheckBlockConflictWithGroupParams{
+			BlockedID: user.ID,
+			GroupID:   &req.GroupID,
+		})
+		if err != nil {
+			log.Printf("Error checking block conflict for user %s in group %s: %v", user.ID, req.GroupID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check block status"})
+			return
+		}
+		if hasConflict {
+			log.Printf("Skipping invite for user %s to group %s due to block conflict", user.ID, req.GroupID)
+			skippedUsers = append(skippedUsers, user.Email)
+			continue
+		}
+
 		userGroup, err := qtx.InsertUserGroup(ctx, db.InsertUserGroupParams{
 			UserID:  &user.ID,
 			GroupID: &req.GroupID,
@@ -262,6 +424,13 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 		default:
 			log.Printf("Warning: Hub AddUserToGroupChan is full. Update for user %d group %d might be delayed or dropped.", userID, req.GroupID)
 		}
+	}
+	if len(skippedUsers) > 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"invites":       successfulInvites,
+			"skipped_users": skippedUsers,
+		})
+		return
 	}
 	c.JSON(http.StatusOK, successfulInvites)
 }

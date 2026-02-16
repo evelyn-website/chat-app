@@ -55,6 +55,13 @@ func (ns NullMessageType) Value() (driver.Value, error) {
 	return string(ns.MessageType), nil
 }
 
+type BlockedUser struct {
+	ID        uuid.UUID        `json:"id"`
+	BlockerID uuid.UUID        `json:"blocker_id"`
+	BlockedID uuid.UUID        `json:"blocked_id"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
 type DeviceKey struct {
 	ID     uuid.UUID `json:"id"`
 	UserID uuid.UUID `json:"user_id"`

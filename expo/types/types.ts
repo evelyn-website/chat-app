@@ -167,6 +167,13 @@ export type PickerImageResult = {
   base64: string;
 };
 
+export type BlockedUser = {
+  id: string;
+  username: string;
+  email: string;
+  blocked_at: string;
+};
+
 export type GroupEvent = {
   type: "group_event";
   event: "user_invited" | "user_removed" | "group_updated" | "group_deleted";
