@@ -6,6 +6,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import Button from "../Button/Button";
+import { useTimeFormat } from "@/components/context/TimeFormatContext";
 
 type GroupDateOptionsProps = {
   dateOptions: DateOptions;
@@ -34,6 +35,7 @@ const GroupDateOptions = ({
   setDateOptions,
 }: GroupDateOptionsProps) => {
   const { showActionSheetWithOptions } = useActionSheet();
+  const { use24HourTime } = useTimeFormat();
 
   const [show, setShow] = useState(false);
   const [expirationInterval, setExpirationInterval] =
@@ -50,6 +52,7 @@ const GroupDateOptions = ({
     const timePart = date.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: !use24HourTime,
     });
 
     return { datePart, timePart };

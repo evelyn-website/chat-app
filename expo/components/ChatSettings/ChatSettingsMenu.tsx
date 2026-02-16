@@ -27,6 +27,7 @@ import {
 } from "expo-image-picker";
 import { useUploadImageClear } from "@/hooks/useUploadImageClear";
 import GroupAvatarEditable from "../GroupAvatarEditable";
+import { useTimeFormat } from "../context/TimeFormatContext";
 
 const ChatSettingsMenu = (props: {
   group: Group;
@@ -44,6 +45,7 @@ const ChatSettingsMenu = (props: {
     toggleGroupMuted,
     createInviteLink,
   } = useWebSocket();
+  const { use24HourTime } = useTimeFormat();
   const { removeGroupMessages } = useMessageStore();
 
   const [currentGroup, setCurrentGroup] = useState<Group>(initialGroup);
@@ -364,6 +366,7 @@ const ChatSettingsMenu = (props: {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: !use24HourTime,
     });
   };
 

@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useWebSocket } from "@/components/context/WebSocketContext";
+import { useTimeFormat } from "@/components/context/TimeFormatContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import type { InvitePreview } from "@/types/types";
 import Button from "@/components/Global/Button/Button";
@@ -13,6 +14,7 @@ const PENDING_INVITE_KEY = "pendingInviteCode";
 export default function InviteScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { validateInvite, acceptInvite } = useWebSocket();
+  const { use24HourTime } = useTimeFormat();
   const { user, refreshGroups } = useGlobalStore();
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
@@ -90,6 +92,7 @@ export default function InviteScreen() {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: !use24HourTime,
     });
   };
 

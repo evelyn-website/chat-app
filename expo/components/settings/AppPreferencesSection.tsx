@@ -6,6 +6,7 @@ import { Switch, Text, View } from "react-native";
 type AppPreferencesSectionProps = {
   use24HourTime: boolean;
   isRefreshingData: boolean;
+  isTimeFormatLoading: boolean;
   onToggle24HourTime: (nextValue: boolean) => void;
   onRefreshData: () => void;
 };
@@ -17,6 +18,7 @@ const sectionTitleClassName = "text-sm font-semibold text-blue-200 mb-3";
 const AppPreferencesSection = ({
   use24HourTime,
   isRefreshingData,
+  isTimeFormatLoading,
   onToggle24HourTime,
   onRefreshData,
 }: AppPreferencesSectionProps) => {
@@ -34,6 +36,7 @@ const AppPreferencesSection = ({
           <Switch
             value={use24HourTime}
             onValueChange={onToggle24HourTime}
+            disabled={isTimeFormatLoading}
             trackColor={{ false: "#4B5563", true: "#3B82F6" }}
             thumbColor={use24HourTime ? "#FFFFFF" : "#9CA3AF"}
           />

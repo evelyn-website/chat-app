@@ -1,5 +1,6 @@
 import { useAuthUtils } from "@/components/context/AuthUtilsContext";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
+import { useTimeFormat } from "@/components/context/TimeFormatContext";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import AccountSection from "@/components/settings/AccountSection";
 import AppInfoSection from "@/components/settings/AppInfoSection";
@@ -20,10 +21,11 @@ import { Alert, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SETTINGS_PUSH_ENABLED_KEY = "settings_push_enabled";
-const SETTINGS_USE_24H_TIME_KEY = "settings_use_24h_time";
 
 export default function SettingsScreen() {
   const { logout } = useAuthUtils();
+  const { use24HourTime, setUse24HourTime, isLoading: isTimeFormatLoading } =
+    useTimeFormat();
   const { user, deviceId, store, refreshGroups, refreshUsers } = useGlobalStore();
   const { getBlockedUsers, unblockUser, getGroups, getUsers } = useWebSocket();
   const insets = useSafeAreaInsets();
@@ -38,7 +40,6 @@ export default function SettingsScreen() {
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [isUpdatingPush, setIsUpdatingPush] = useState(false);
   const [isPushSettingLoading, setIsPushSettingLoading] = useState(true);
-  const [use24HourTime, setUse24HourTime] = useState(false);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
 
   const appVersion = Constants.expoConfig?.version ?? "Unknown";
@@ -47,12 +48,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [pushPref, timePref] = await Promise.all([
-          AsyncStorage.getItem(SETTINGS_PUSH_ENABLED_KEY),
-          AsyncStorage.getItem(SETTINGS_USE_24H_TIME_KEY),
-        ]);
+        const pushPref = await AsyncStorage.getItem(SETTINGS_PUSH_ENABLED_KEY);
         setIsPushEnabled(pushPref === "true");
-        setUse24HourTime(timePref === "true");
       } catch (error) {
         console.error("Failed to load settings preferences:", error);
       } finally {
@@ -202,17 +199,12 @@ export default function SettingsScreen() {
     [deviceId, isPushSettingLoading, isUpdatingPush],
   );
 
-  const handleToggle24HourTime = useCallback(async (nextValue: boolean) => {
-    setUse24HourTime(nextValue);
-    try {
-      await AsyncStorage.setItem(
-        SETTINGS_USE_24H_TIME_KEY,
-        nextValue ? "true" : "false",
-      );
-    } catch (error) {
-      console.error("Failed saving time format preference:", error);
-    }
-  }, []);
+  const handleToggle24HourTime = useCallback(
+    async (nextValue: boolean) => {
+      await setUse24HourTime(nextValue);
+    },
+    [setUse24HourTime],
+  );
 
   const handleRefreshData = useCallback(async () => {
     if (isRefreshingData) return;
@@ -298,6 +290,7 @@ export default function SettingsScreen() {
           isRefreshingData={isRefreshingData}
           onToggle24HourTime={handleToggle24HourTime}
           onRefreshData={handleRefreshData}
+          isTimeFormatLoading={isTimeFormatLoading}
         />
 
         <AppInfoSection appName={appName} appVersion={appVersion} />

@@ -15,6 +15,7 @@ import {
 } from "expo-image-picker";
 import GroupAvatarEditable from "@/components/GroupAvatarEditable";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useTimeFormat } from "@/components/context/TimeFormatContext";
 
 export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
   const [tempGroupId] = useState(() => uuidv4());
@@ -36,6 +37,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
   });
 
   const { createGroup, inviteUsersToGroup, getGroups } = useWebSocket();
+  const { use24HourTime } = useTimeFormat();
   const [isLoading, setIsLoading] = useState(false);
   const [showDateOptions, setShowDateOptions] = useState(false);
   const [showDescriptionInput, setShowDescriptionInput] = useState(false);
@@ -124,6 +126,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: !use24HourTime,
     });
   };
 
