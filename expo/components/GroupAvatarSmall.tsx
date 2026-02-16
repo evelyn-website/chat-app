@@ -8,7 +8,7 @@ import { useCachedImageClear } from "@/hooks/useCachedImage";
 type Props = {
   imageURL: string | null;
   blurhash: string | null;
-  name: string;
+  name: string | null | undefined;
 };
 
 const GroupAvatarSmall = memo(function GroupAvatarSmall({
@@ -42,9 +42,10 @@ const GroupAvatarSmall = memo(function GroupAvatarSmall({
       </>
     );
   } else {
+    const initial = name ? name.charAt(0).toUpperCase() : "?";
     content = (
       <Text className="text-gray-100 text-sm font-bold">
-        {name.charAt(0).toUpperCase()}
+        {initial}
       </Text>
     );
   }
