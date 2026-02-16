@@ -1,5 +1,5 @@
 import React from "react";
-import { render, fireEvent, waitFor } from "@testing-library/react-native";
+import { render, fireEvent } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import UserListItem from "./UserListItem";
 import type { Group, GroupUser } from "@/types/types";
@@ -191,10 +191,10 @@ describe("UserListItem", () => {
       fireEvent(pressable!, "longPress");
 
       // Get the "Block" button callback from Alert.alert
-      const alertButtons = alertSpy.mock.calls[0][2] as Array<{
+      const alertButtons = alertSpy.mock.calls[0][2] as {
         text: string;
         onPress?: () => void;
-      }>;
+      }[];
       const blockButton = alertButtons.find((b) => b.text === "Block");
       expect(blockButton).toBeTruthy();
 
@@ -223,10 +223,10 @@ describe("UserListItem", () => {
       const pressable = getByText("Bob").parent?.parent?.parent?.parent;
       fireEvent(pressable!, "longPress");
 
-      const alertButtons = alertSpy.mock.calls[0][2] as Array<{
+      const alertButtons = alertSpy.mock.calls[0][2] as {
         text: string;
         onPress?: () => void;
-      }>;
+      }[];
       const blockButton = alertButtons.find((b) => b.text === "Block");
 
       await blockButton!.onPress!();
@@ -256,10 +256,10 @@ describe("UserListItem", () => {
       const pressable = getByText("Bob").parent?.parent?.parent?.parent;
       fireEvent(pressable!, "longPress");
 
-      const alertButtons = alertSpy.mock.calls[0][2] as Array<{
+      const alertButtons = alertSpy.mock.calls[0][2] as {
         text: string;
         style?: string;
-      }>;
+      }[];
       const cancelButton = alertButtons.find((b) => b.text === "Cancel");
       expect(cancelButton).toBeTruthy();
       expect(cancelButton!.style).toBe("cancel");

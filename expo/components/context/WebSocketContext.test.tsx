@@ -188,9 +188,6 @@ describe('WebSocketContext', () => {
       await act(() => {
         jest.advanceTimersByTime(500);
       });
-
-      // No crash, provider still functional
-      expect(true).toBe(true);
     });
 
     it('should not attempt reconnection on repeated connected events', async () => {

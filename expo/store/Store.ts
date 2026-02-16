@@ -383,7 +383,8 @@ export class Store implements IStore {
       .then(() => {
         releaseLock();
       });
-    const lockReleasedPromise = new Promise<void>((resolve) => {
+    // Wire up releaseLock so the transaction lock resolves after execution
+    new Promise<void>((resolve) => {
       releaseLock = resolve;
     });
 
@@ -583,7 +584,7 @@ export class Store implements IStore {
         let parsedGroupUsers;
         try {
           parsedGroupUsers = JSON.parse(row.group_users);
-        } catch (e) {
+        } catch {
           parsedGroupUsers = [];
         }
         return {
@@ -614,7 +615,7 @@ export class Store implements IStore {
         let group_admin_map;
         try {
           group_admin_map = JSON.parse(row.group_admin_map ?? "{}");
-        } catch (error) {
+        } catch {
           group_admin_map = {};
         }
         return {

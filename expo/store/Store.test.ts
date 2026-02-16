@@ -2,7 +2,16 @@ import { Store } from './Store';
 import * as SQLite from 'expo-sqlite';
 import { DbMessage, Group, User, MessageType } from '@/types/types';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sqlite = require('expo-sqlite');
+
 jest.mock('expo-sqlite');
+
+interface QueryLogEntry {
+  sql: string;
+  params: unknown[];
+  method: string;
+}
 
 describe('Store', () => {
   let store: Store;
@@ -10,7 +19,6 @@ describe('Store', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset any existing database instances
-    const sqlite = require('expo-sqlite');
     if (sqlite.__clearAllDatabases) {
       sqlite.__clearAllDatabases();
     }
@@ -38,7 +46,7 @@ describe('Store', () => {
 
       // Should have executed PRAGMA and CREATE TABLE statements
       expect(queryLog.length).toBeGreaterThan(0);
-      const execQueries = queryLog.filter((q) => q.method === 'execAsync');
+      const execQueries = queryLog.filter((q: QueryLogEntry) => q.method === 'execAsync');
       expect(execQueries.length).toBeGreaterThan(0);
     });
 
@@ -48,7 +56,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const walQuery = queryLog.find((q) =>
+      const walQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('PRAGMA journal_mode = \'wal\'')
       );
 
@@ -61,7 +69,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const fkQuery = queryLog.find((q) =>
+      const fkQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('PRAGMA foreign_keys = ON')
       );
 
@@ -74,7 +82,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const createUsersQuery = queryLog.find((q) =>
+      const createUsersQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('CREATE TABLE IF NOT EXISTS users')
       );
 
@@ -87,7 +95,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const createGroupsQuery = queryLog.find((q) =>
+      const createGroupsQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('CREATE TABLE IF NOT EXISTS groups')
       );
 
@@ -100,7 +108,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const createMessagesQuery = queryLog.find((q) =>
+      const createMessagesQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('CREATE TABLE IF NOT EXISTS messages')
       );
 
@@ -113,7 +121,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const versionQueries = queryLog.filter((q) =>
+      const versionQueries = queryLog.filter((q: QueryLogEntry) =>
         q.sql.includes('PRAGMA user_version')
       );
 
@@ -127,10 +135,6 @@ describe('Store', () => {
 
       // Get first initialization query log
       const db = (store as any).db;
-      const firstInitQueryLog = db.getQueryLog();
-      const firstInitCreateTableQueries = firstInitQueryLog.filter((q) =>
-        q.sql.includes('CREATE TABLE')
-      );
 
       // Clear logs and reinitialize
       db.clearQueryLog();
@@ -138,13 +142,6 @@ describe('Store', () => {
       // Create another store - should not re-migrate
       const store2 = new Store();
       await store2['initPromise'];
-
-      // The second initialization should be minimal (no CREATE TABLE statements)
-      // Use the same database instance since both stores use 'store.db'
-      const secondInitQueryLog = db.getQueryLog();
-      const secondInitCreateTableQueries = secondInitQueryLog.filter((q) =>
-        q.sql.includes('CREATE TABLE')
-      );
 
       // Note: The mock database doesn't persist PRAGMA user_version, so migrations
       // will run again. In a real scenario with persistent version tracking, this
@@ -162,7 +159,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const mutedMigration = queryLog.find((q) =>
+      const mutedMigration = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('ALTER TABLE groups ADD COLUMN muted')
       );
 
@@ -175,7 +172,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const v12Pragma = queryLog.find((q) =>
+      const v12Pragma = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('PRAGMA user_version = 12')
       );
 
@@ -190,7 +187,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have multiple version pragmas as migrations occur
-      const versionPragmas = queryLog.filter((q) =>
+      const versionPragmas = queryLog.filter((q: QueryLogEntry) =>
         q.sql.includes('PRAGMA user_version =')
       );
 
@@ -204,7 +201,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const createGroupReadsQuery = queryLog.find((q) =>
+      const createGroupReadsQuery = queryLog.find((q: QueryLogEntry) =>
         q.sql.includes('CREATE TABLE group_reads')
       );
 
@@ -219,7 +216,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should create at least one index
-      const indexQueries = queryLog.filter((q) =>
+      const indexQueries = queryLog.filter((q: QueryLogEntry) =>
         q.sql.includes('CREATE INDEX')
       );
 
@@ -235,7 +232,7 @@ describe('Store', () => {
     });
 
     it('should execute operation within a transaction', async () => {
-      const result = await store.performSerialTransaction(async (db) => {
+      const result = await store.performSerialTransaction(async (_db) => {
         return 'success';
       });
 
@@ -245,8 +242,8 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have BEGIN and COMMIT
-      const beginQuery = queryLog.find((q) => q.sql.includes('BEGIN'));
-      const commitQuery = queryLog.find((q) => q.sql.includes('COMMIT'));
+      const beginQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('BEGIN'));
+      const commitQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('COMMIT'));
 
       expect(beginQuery).toBeDefined();
       expect(commitQuery).toBeDefined();
@@ -256,7 +253,7 @@ describe('Store', () => {
       const error = new Error('Test error');
 
       try {
-        await store.performSerialTransaction(async (db) => {
+        await store.performSerialTransaction(async (_db) => {
           throw error;
         });
       } catch (e) {
@@ -267,8 +264,8 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have BEGIN and ROLLBACK
-      const beginQuery = queryLog.find((q) => q.sql.includes('BEGIN'));
-      const rollbackQuery = queryLog.find((q) => q.sql.includes('ROLLBACK'));
+      const beginQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('BEGIN'));
+      const rollbackQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('ROLLBACK'));
 
       expect(beginQuery).toBeDefined();
       expect(rollbackQuery).toBeDefined();
@@ -278,12 +275,12 @@ describe('Store', () => {
       const results: string[] = [];
 
       await Promise.all([
-        store.performSerialTransaction(async (db) => {
+        store.performSerialTransaction(async (_db) => {
           results.push('first-start');
           await new Promise((resolve) => setTimeout(resolve, 10));
           results.push('first-end');
         }),
-        store.performSerialTransaction(async (db) => {
+        store.performSerialTransaction(async (_db) => {
           results.push('second-start');
           results.push('second-end');
         }),
@@ -297,7 +294,7 @@ describe('Store', () => {
     it('should return operation result', async () => {
       const testData = { id: 'test-123', value: 42 };
 
-      const result = await store.performSerialTransaction(async (db) => {
+      const result = await store.performSerialTransaction(async (_db) => {
         return testData;
       });
 
@@ -318,7 +315,7 @@ describe('Store', () => {
     it('should handle async operations within transaction', async () => {
       let operationCompleted = false;
 
-      await store.performSerialTransaction(async (db) => {
+      await store.performSerialTransaction(async (_db) => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         operationCompleted = true;
       });
@@ -329,7 +326,7 @@ describe('Store', () => {
     it('should maintain lock state across transactions', async () => {
       const transactionLock1 = (store as any).transactionLock;
 
-      await store.performSerialTransaction(async (db) => {
+      await store.performSerialTransaction(async (_db) => {
         // Lock should change during transaction
         expect((store as any).transactionLock).not.toBe(transactionLock1);
       });
@@ -367,7 +364,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have INSERT statement
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO messages'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO messages'));
       expect(insertQuery).toBeDefined();
     });
 
@@ -393,7 +390,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT OR REPLACE'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT OR REPLACE'));
 
       expect(insertQuery).toBeDefined();
     });
@@ -420,7 +417,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM messages'));
+      const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM messages'));
 
       expect(deleteQuery).toBeDefined();
     });
@@ -447,7 +444,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM messages'));
+      const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM messages'));
 
       // When clearFirst is false, there should be no DELETE query
       expect(deleteQuery).toBeUndefined();
@@ -487,7 +484,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Verify that the parameters were passed
-      const runQueries = queryLog.filter((q) => q.method === 'runAsync');
+      const runQueries = queryLog.filter((q: QueryLogEntry) => q.method === 'runAsync');
       expect(runQueries.length).toBeGreaterThan(0);
     });
 
@@ -513,7 +510,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT OR REPLACE INTO messages'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT OR REPLACE INTO messages'));
 
       expect(insertQuery).toBeDefined();
     });
@@ -540,7 +537,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have multiple INSERT statements
-      const insertQueries = queryLog.filter((q) => q.sql.includes('INSERT'));
+      const insertQueries = queryLog.filter((q: QueryLogEntry) => q.sql.includes('INSERT'));
       expect(insertQueries.length).toBeGreaterThanOrEqual(5);
     });
 
@@ -568,7 +565,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should insert into users
-      const userInsertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO users'));
+      const userInsertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO users'));
       expect(userInsertQuery).toBeDefined();
     });
 
@@ -596,7 +593,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should insert into groups
-      const groupInsertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups'));
+      const groupInsertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups'));
       expect(groupInsertQuery).toBeDefined();
     });
 
@@ -622,9 +619,6 @@ describe('Store', () => {
         ];
 
         await store.saveMessages(messages);
-
-        // Should complete without error
-        expect(true).toBe(true);
       }
     });
   });
@@ -714,7 +708,7 @@ describe('Store', () => {
       await store.loadMessages();
 
       const queryLog = db.getQueryLog();
-      const selectQuery = queryLog.find((q) => q.sql.includes('SELECT') && q.sql.includes('FROM messages'));
+      const selectQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('SELECT') && q.sql.includes('FROM messages'));
 
       expect(selectQuery).toBeDefined();
     });
@@ -829,7 +823,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have INSERT statement
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups'));
       expect(insertQuery).toBeDefined();
     });
 
@@ -851,7 +845,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const upsertQuery = queryLog.find((q) => q.sql.includes('ON CONFLICT'));
+      const upsertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('ON CONFLICT'));
 
       expect(upsertQuery).toBeDefined();
     });
@@ -874,7 +868,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM groups WHERE id NOT IN'));
+      const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM groups WHERE id NOT IN'));
 
       expect(deleteQuery).toBeDefined();
     });
@@ -897,7 +891,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM groups WHERE id NOT IN'));
+      const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM groups WHERE id NOT IN'));
 
       expect(deleteQuery).toBeUndefined();
     });
@@ -925,7 +919,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups'));
 
       expect(insertQuery).toBeDefined();
     });
@@ -959,8 +953,6 @@ describe('Store', () => {
 
       await store.saveGroups(adminGroup);
       await store.saveGroups(nonAdminGroup);
-
-      expect(true).toBe(true);
     });
 
     it('should handle optional fields (description, location, image_url, blurhash)', async () => {
@@ -982,8 +974,6 @@ describe('Store', () => {
       ];
 
       await store.saveGroups(groups);
-
-      expect(true).toBe(true);
     });
 
     it('should save muted status as integer', async () => {
@@ -1005,7 +995,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
 
       expect(insertQuery).toBeDefined();
       // The last param should be 1 (true -> 1)
@@ -1032,7 +1022,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
 
       expect(insertQuery).toBeDefined();
       const params = insertQuery?.params || [];
@@ -1058,7 +1048,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups') && q.sql.includes('muted'));
 
       expect(insertQuery).toBeDefined();
       const params = insertQuery?.params || [];
@@ -1084,8 +1074,6 @@ describe('Store', () => {
       ];
 
       await store.saveGroups(groups);
-
-      expect(true).toBe(true);
     });
 
     it('should handle multiple groups', async () => {
@@ -1106,7 +1094,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have multiple INSERT statements
-      const insertQueries = queryLog.filter((q) => q.sql.includes('INSERT INTO groups'));
+      const insertQueries = queryLog.filter((q: QueryLogEntry) => q.sql.includes('INSERT INTO groups'));
       expect(insertQueries.length).toBeGreaterThanOrEqual(3);
     });
   });
@@ -1380,7 +1368,7 @@ describe('Store', () => {
           email: 'test@example.com',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          group_admin_map: {},
+          group_admin_map: new Map(),
         },
       ];
 
@@ -1390,7 +1378,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have INSERT statement
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT OR REPLACE INTO users'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT OR REPLACE INTO users'));
       expect(insertQuery).toBeDefined();
     });
 
@@ -1412,7 +1400,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have INSERT statement
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT OR REPLACE INTO users'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT OR REPLACE INTO users'));
       expect(insertQuery).toBeDefined();
     });
 
@@ -1424,13 +1412,11 @@ describe('Store', () => {
           email: 'test@example.com',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          group_admin_map: {},
+          group_admin_map: new Map(),
         },
       ];
 
       await store.saveUsers(users);
-
-      expect(true).toBe(true);
     });
 
     it('should handle multiple users', async () => {
@@ -1440,7 +1426,7 @@ describe('Store', () => {
         email: `user${i}@example.com`,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        group_admin_map: {},
+        group_admin_map: new Map(),
       }));
 
       await store.saveUsers(users);
@@ -1449,7 +1435,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have multiple INSERT statements
-      const insertQueries = queryLog.filter((q) => q.sql.includes('INSERT OR REPLACE INTO users'));
+      const insertQueries = queryLog.filter((q: QueryLogEntry) => q.sql.includes('INSERT OR REPLACE INTO users'));
       expect(insertQueries.length).toBeGreaterThanOrEqual(3);
     });
   });
@@ -1565,7 +1551,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have INSERT statement
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO group_reads'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO group_reads'));
       expect(insertQuery).toBeDefined();
     });
 
@@ -1577,7 +1563,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have ON CONFLICT clause
-      const upsertQuery = queryLog.find((q) => q.sql.includes('ON CONFLICT'));
+      const upsertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('ON CONFLICT'));
       expect(upsertQuery).toBeDefined();
     });
 
@@ -1586,7 +1572,7 @@ describe('Store', () => {
 
       const db = (store as any).db;
       const queryLog = db.getQueryLog();
-      const insertQuery = queryLog.find((q) => q.sql.includes('INSERT INTO group_reads'));
+      const insertQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('INSERT INTO group_reads'));
 
       expect(insertQuery).toBeDefined();
       // Timestamp should be in ISO format
@@ -1603,7 +1589,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have multiple INSERT statements
-      const insertQueries = queryLog.filter((q) => q.sql.includes('INSERT INTO group_reads'));
+      const insertQueries = queryLog.filter((q: QueryLogEntry) => q.sql.includes('INSERT INTO group_reads'));
       expect(insertQueries.length).toBeGreaterThanOrEqual(3);
     });
   });
@@ -1648,7 +1634,7 @@ describe('Store', () => {
 
       const queryLog = db.getQueryLog();
       const deleteGroupQuery = queryLog.find(
-        (q) => q.sql.includes('DELETE FROM groups') && q.sql.includes('IN')
+        (q: QueryLogEntry) => q.sql.includes('DELETE FROM groups') && q.sql.includes('IN')
       );
 
       expect(deleteGroupQuery).toBeDefined();
@@ -1664,7 +1650,7 @@ describe('Store', () => {
 
       const queryLog = db.getQueryLog();
       const deleteReadsQuery = queryLog.find(
-        (q) => q.sql.includes('DELETE FROM group_reads') && q.sql.includes('IN')
+        (q: QueryLogEntry) => q.sql.includes('DELETE FROM group_reads') && q.sql.includes('IN')
       );
 
       expect(deleteReadsQuery).toBeDefined();
@@ -1678,7 +1664,7 @@ describe('Store', () => {
 
       const queryLog = db.getQueryLog();
       const selectQuery = queryLog.find(
-        (q) =>
+        (q: QueryLogEntry) =>
           q.sql.includes('SELECT') &&
           q.sql.includes('end_time IS NOT NULL') &&
           q.sql.includes("end_time < datetime('now')")
@@ -1695,7 +1681,7 @@ describe('Store', () => {
 
       const queryLog = db.getQueryLog();
       const deleteQuery = queryLog.find(
-        (q) => q.method === 'runAsync' && q.sql.includes('DELETE')
+        (q: QueryLogEntry) => q.method === 'runAsync' && q.sql.includes('DELETE')
       );
 
       expect(deleteQuery).toBeUndefined();
@@ -1717,15 +1703,12 @@ describe('Store', () => {
         const queryLog = db.getQueryLog();
 
         // Should have DELETE statement
-        const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM messages'));
+        const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM messages'));
         expect(deleteQuery).toBeDefined();
       });
 
       it('should not affect other tables', async () => {
         await store.clearMessages();
-
-        // Operation should complete without error
-        expect(true).toBe(true);
       });
     });
 
@@ -1737,7 +1720,7 @@ describe('Store', () => {
         const queryLog = db.getQueryLog();
 
         // Should have DELETE statement
-        const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM groups'));
+        const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM groups'));
         expect(deleteQuery).toBeDefined();
       });
     });
@@ -1750,7 +1733,7 @@ describe('Store', () => {
         const queryLog = db.getQueryLog();
 
         // Should have DELETE statement
-        const deleteQuery = queryLog.find((q) => q.sql.includes('DELETE FROM users'));
+        const deleteQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('DELETE FROM users'));
         expect(deleteQuery).toBeDefined();
       });
     });
@@ -1763,8 +1746,6 @@ describe('Store', () => {
       await store['initPromise'];
 
       await store.close();
-
-      const db = (store as any).db;
 
       // Database should be set to null after close
       expect((store as any).db).toBeNull();
@@ -1812,9 +1793,6 @@ describe('Store', () => {
 
       await store.close();
       await store.close();
-
-      // Should complete without error
-      expect(true).toBe(true);
     });
   });
 
@@ -1829,7 +1807,7 @@ describe('Store', () => {
       const testError = new Error('Operation failed');
 
       await expect(
-        store.performSerialTransaction(async (db) => {
+        store.performSerialTransaction(async (_db) => {
           throw testError;
         })
       ).rejects.toEqual(testError);
@@ -1838,7 +1816,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have ROLLBACK
-      const rollbackQuery = queryLog.find((q) => q.sql.includes('ROLLBACK'));
+      const rollbackQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('ROLLBACK'));
       expect(rollbackQuery).toBeDefined();
     });
 
@@ -1952,7 +1930,7 @@ describe('Store', () => {
       const queryLog = db.getQueryLog();
 
       // Should have foreign key constraints
-      const foreignKeyQuery = queryLog.find((q) => q.sql.includes('FOREIGN KEY'));
+      const foreignKeyQuery = queryLog.find((q: QueryLogEntry) => q.sql.includes('FOREIGN KEY'));
       expect(foreignKeyQuery).toBeDefined();
     });
 
@@ -1996,8 +1974,6 @@ describe('Store', () => {
         store.saveMessages(messages1),
         store.saveMessages(messages2),
       ]);
-
-      expect(true).toBe(true);
     });
   });
 });
