@@ -63,7 +63,7 @@ const MessageEntry = ({
     if (permissionResult.granted === false) {
       Alert.alert(
         "Permission Required",
-        "You've refused to allow this app to access your photos."
+        "You've refused to allow this app to access your photos.",
       );
       return;
     }
@@ -97,15 +97,18 @@ const MessageEntry = ({
     for (let i = 1; i <= count; i++) {
       const messageNum = i;
 
-      const promise = sendMessage(`Test message ${messageNum}`, group.id, recipientUserIds)
-        .catch((error) => {
-          console.error(`❌ [BURST] Error sending message ${messageNum}:`, error);
-        });
+      const promise = sendMessage(
+        `Test message ${messageNum}`,
+        group.id,
+        recipientUserIds,
+      ).catch((error) => {
+        console.error(`❌ [BURST] Error sending message ${messageNum}:`, error);
+      });
 
       promises.push(promise);
 
       // Small stagger to prevent exact simultaneous sends
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Wait for all to complete
@@ -155,8 +158,6 @@ const MessageEntry = ({
               height: 40,
               fontSize: 16,
               lineHeight: 20,
-              paddingTop: 0,
-              paddingBottom: 0,
               paddingVertical: 0,
             }}
             value={textContent}
