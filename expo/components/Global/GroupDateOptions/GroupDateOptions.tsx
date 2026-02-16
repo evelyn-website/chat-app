@@ -68,7 +68,7 @@ const GroupDateOptions = ({
         if (selectedIndex !== undefined && data[selectedIndex]) {
           setExpirationInterval(data[selectedIndex].value);
         }
-      }
+      },
     );
   };
 
@@ -77,7 +77,7 @@ const GroupDateOptions = ({
     if (currentDate && expirationInterval !== "month") {
       const expirationDate = new Date(currentDate);
       expirationDate.setDate(
-        expirationDate.getDate() + Number(expirationInterval)
+        expirationDate.getDate() + Number(expirationInterval),
       );
       setDateOptions({
         startTime: currentDate,
@@ -98,7 +98,7 @@ const GroupDateOptions = ({
       if (prevState.startTime && expirationInterval !== "month") {
         const expirationDate = new Date(prevState.startTime);
         expirationDate.setDate(
-          expirationDate.getDate() + Number(expirationInterval)
+          expirationDate.getDate() + Number(expirationInterval),
         );
         return {
           startTime: prevState.startTime,
@@ -122,9 +122,13 @@ const GroupDateOptions = ({
 
   const startFormatted = formatDate(dateOptions?.startTime);
   const endFormatted = formatDate(dateOptions?.endTime);
+  const secondaryButtonClassName =
+    "bg-white/5 rounded-xl active:bg-white/10";
+  const quickOptionButtonClassName = `flex-1 ${secondaryButtonClassName}`;
+  const secondaryButtonTextClassName = "text-blue-100 font-medium";
 
   return (
-    <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mx-0 my-0 overflow-hidden">
+    <View className="w-full overflow-hidden">
       <View className="mb-4 w-full">
         <View className="flex flex-row mb-2 w-full">
           <Button
@@ -139,8 +143,8 @@ const GroupDateOptions = ({
               });
             }}
             text="Today"
-            className="mr-2 flex-1 bg-gray-800 rounded-lg"
-            textClassName="text-blue-300 font-medium"
+            className={`mr-2 ${quickOptionButtonClassName}`}
+            textClassName={secondaryButtonTextClassName}
             border={false}
           />
           <Button
@@ -158,8 +162,8 @@ const GroupDateOptions = ({
               });
             }}
             text="Tomorrow"
-            className="flex-1 bg-gray-800 rounded-lg"
-            textClassName="text-blue-300 font-medium"
+            className={quickOptionButtonClassName}
+            textClassName={secondaryButtonTextClassName}
             border={false}
           />
         </View>
@@ -236,8 +240,8 @@ const GroupDateOptions = ({
             });
           }}
           text="This weekend"
-          className="bg-gray-800 rounded-lg w-full"
-          textClassName="text-blue-300 font-medium"
+          className={`${secondaryButtonClassName} w-full`}
+          textClassName={secondaryButtonTextClassName}
           border={false}
         />
       </View>
@@ -245,32 +249,32 @@ const GroupDateOptions = ({
         size="base"
         onPress={toggleDatePicker}
         text={show ? "Hide Custom Date" : "Custom Date & Time"}
-        className="bg-blue-600 rounded-lg mb-4 w-full"
+        className="bg-blue-600 rounded-xl mb-4 w-full"
         textClassName="text-white font-medium"
         border={false}
       />
-      <View className="bg-gray-800 rounded-lg p-3 mb-2 w-full h-min-[80]">
-        <View className="mb-1">
-          <Text className="text-sm text-gray-400 mb-1">Starts:</Text>
+      <View className="bg-white/5 rounded-xl p-3 mb-2 w-full h-min-[80]">
+        <View className="mb-3">
+          <Text className="text-xs text-zinc-200 mb-1">Starts</Text>
           <View className="flex flex-row">
-            <Text className="text-base font-medium text-gray-200">
+            <Text className="text-sm font-medium text-zinc-100">
               {startFormatted.datePart} {startFormatted.timePart}
             </Text>
           </View>
         </View>
 
         <View>
-          <Text className="text-sm text-gray-400 mb-1">Ends:</Text>
+          <Text className="text-xs text-zinc-200 mb-1">Ends</Text>
           <View className="flex flex-row">
-            <Text className="text-base font-medium text-gray-200">
+            <Text className="text-sm font-medium text-zinc-100">
               {endFormatted.datePart} {endFormatted.timePart}
             </Text>
           </View>
         </View>
       </View>
       {show && (
-        <View className="mt-2 bg-gray-800 rounded-lg p-3 w-full">
-          <Text className="text-sm font-medium text-gray-300 mb-2">
+        <View className="mt-2 bg-white/10 rounded-xl p-3 w-full">
+          <Text className="text-sm font-medium text-zinc-200 mb-2">
             Select Start Date & Time
           </Text>
           <View className="w-full items-center">
@@ -282,13 +286,16 @@ const GroupDateOptions = ({
               themeVariant="dark"
             />
           </View>
-          <Text className="text-sm font-medium text-gray-300 mb-2 mt-3">
+          <Text className="text-sm font-medium text-zinc-200 mb-2 mt-3">
             Set Duration
           </Text>
           <View className="w-full">
             <Button
               text={`${data.find((item) => item?.value === expirationInterval)?.label}`}
               onPress={onSelectExpiration}
+              className={secondaryButtonClassName}
+              textClassName={secondaryButtonTextClassName}
+              border={false}
             />
           </View>
         </View>

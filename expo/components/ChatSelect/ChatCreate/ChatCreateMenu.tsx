@@ -14,6 +14,7 @@ import {
   launchImageLibraryAsync,
 } from "expo-image-picker";
 import GroupAvatarEditable from "@/components/GroupAvatarEditable";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
   const [tempGroupId] = useState(() => uuidv4());
@@ -171,9 +172,14 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
     setCurrentBlurhash(null);
   }, []);
 
+  const panelClassName = "w-full rounded-2xl border border-white/10 bg-white/5 p-4";
+  const sectionTitleClassName = "text-sm font-semibold text-blue-200 mb-3";
+  const inputClassName =
+    "bg-black/20 text-white border border-white/10 rounded-xl px-4 py-3 w-full";
+
   return (
-    <View className="w-full">
-      <View className="items-center my-4">
+    <View className="w-full pb-4">
+      <View className="items-center mt-2 mb-4">
         <GroupAvatarEditable
           imageURL={currentImageUrlForPreview}
           blurhash={currentBlurhash}
@@ -184,142 +190,156 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
         />
       </View>
 
-      {/* Group Name Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
-          Group Name *
-        </Text>
-        <TextInput
-          className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full"
-          onChangeText={setGroupName}
-          value={groupName}
-          placeholder="Enter group name"
-          placeholderTextColor="#6B7280"
-        />
-      </View>
-
-      {/* Event Schedule Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <View className="flex-row justify-between items-center mb-3">
-          <Text className="text-lg font-semibold text-blue-400">
-            Event Schedule *
-          </Text>
-          <Button
-            size="sm"
-            onPress={() => setShowDateOptions(!showDateOptions)}
-            text={showDateOptions ? "Hide" : "Edit"}
-            variant="secondary"
+      <View className={panelClassName}>
+        <View className="pb-4 mb-4 border-b border-white/10">
+          <Text className={sectionTitleClassName}>Group Name *</Text>
+          <TextInput
+            className={inputClassName}
+            onChangeText={setGroupName}
+            value={groupName}
+            placeholder="Enter group name"
+            placeholderTextColor="#9CA3AF"
           />
         </View>
-        {!showDateOptions && (dateOptions.startTime || dateOptions.endTime) && (
-          <View className="bg-gray-800 rounded-lg p-3 mb-2">
-            <View className="mb-1">
-              <Text className="text-sm text-gray-400 mb-1">Starts:</Text>
-              <Text className="text-base font-medium text-gray-200">
-                {formatDate(dateOptions.startTime)}
-              </Text>
-            </View>
-            <View>
-              <Text className="text-sm text-gray-400 mb-1">Ends:</Text>
-              <Text className="text-base font-medium text-gray-200">
-                {formatDate(dateOptions.endTime)}
-              </Text>
-            </View>
-          </View>
-        )}
-        {!showDateOptions && !dateOptions.startTime && !dateOptions.endTime && (
-          <View className="bg-gray-800 rounded-lg p-3 mb-2">
-            <Text className="text-base text-gray-400">No schedule set</Text>
-          </View>
-        )}
-        {showDateOptions && (
-          <GroupDateOptions
-            dateOptions={dateOptions}
-            setDateOptions={setDateOptions}
-          />
-        )}
-      </View>
 
-      {/* Optional Details Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
-          Optional Details
-        </Text>
-        <View className="mb-3">
-          <Pressable
-            onPress={() => setShowDescriptionInput(!showDescriptionInput)}
-            className="flex-row justify-between items-center p-3 bg-gray-800 rounded-lg mb-2 active:bg-gray-700"
-          >
-            <Text className="text-base text-gray-300">Description</Text>
-            <Text className="text-blue-400">
-              {showDescriptionInput ? "Hide" : description ? "Edit" : "Add"}
-            </Text>
-          </Pressable>
-          {showDescriptionInput && (
-            <TextInput
-              className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full h-24"
-              onChangeText={setDescription}
-              value={description}
-              placeholder="Add a description (optional)"
-              placeholderTextColor="#6B7280"
-              multiline
-              textAlignVertical="top"
+        <View className="pb-4 mb-4 border-b border-white/10">
+          <View className="flex-row justify-between items-center mb-3">
+            <Text className={sectionTitleClassName}>Event Schedule *</Text>
+            <Button
+              size="sm"
+              onPress={() => setShowDateOptions(!showDateOptions)}
+              text={showDateOptions ? "Hide" : "Edit"}
+              variant="ghost"
+              className="px-2 py-1 rounded-lg"
+              textClassName="text-blue-200"
+            />
+          </View>
+          {!showDateOptions && (dateOptions.startTime || dateOptions.endTime) && (
+            <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
+              <View className="mb-2 flex-row items-start">
+                <Ionicons
+                  name="play-circle-outline"
+                  size={18}
+                  color="#bfdbfe"
+                  style={{ marginTop: 2, marginRight: 8 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-xs text-zinc-300 mb-1">Starts</Text>
+                  <Text className="text-sm font-medium text-zinc-100">
+                    {formatDate(dateOptions.startTime)}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-row items-start">
+                <Ionicons
+                  name="stop-circle-outline"
+                  size={18}
+                  color="#bfdbfe"
+                  style={{ marginTop: 2, marginRight: 8 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-xs text-zinc-300 mb-1">Ends</Text>
+                  <Text className="text-sm font-medium text-zinc-100">
+                    {formatDate(dateOptions.endTime)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+          {!showDateOptions && !dateOptions.startTime && !dateOptions.endTime && (
+            <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
+              <Text className="text-sm text-zinc-300">No schedule set</Text>
+            </View>
+          )}
+          {showDateOptions && (
+            <GroupDateOptions
+              dateOptions={dateOptions}
+              setDateOptions={setDateOptions}
             />
           )}
-          {!showDescriptionInput && description ? (
-            <Text className="text-gray-400 px-3 py-1 text-sm italic">
-              {description}
-            </Text>
-          ) : null}
         </View>
-        <View>
-          <Pressable
-            onPress={() => setShowLocationInput(!showLocationInput)}
-            className="flex-row justify-between items-center p-3 bg-gray-800 rounded-lg mb-2 active:bg-gray-700"
-          >
-            <Text className="text-base text-gray-300">Location</Text>
-            <Text className="text-blue-400">
-              {showLocationInput ? "Hide" : location ? "Edit" : "Add"}
-            </Text>
-          </Pressable>
-          {showLocationInput && (
-            <TextInput
-              className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full"
-              onChangeText={setLocation}
-              value={location}
-              placeholder="Add a location (optional)"
-              placeholderTextColor="#6B7280"
-            />
-          )}
-          {!showLocationInput && location ? (
-            <Text className="text-gray-400 px-3 py-1 text-sm italic">
-              {location}
-            </Text>
-          ) : null}
-        </View>
-      </View>
 
-      {/* User Invite Card */}
-      <View className="w-full z-50 bg-gray-900 rounded-xl shadow-md p-4 mb-4 overflow-visible">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
-          Invite Friends
-        </Text>
-        <View className="z-40 bg-gray-800 rounded-lg p-3 overflow-visible">
-          <UserInviteMultiselect
-            placeholderText="Select friends to invite"
-            userList={usersToInvite}
-            setUserList={setUsersToInvite}
-            excludedUserList={self ? [self] : []}
-          />
+        <View className="pb-4 mb-4 border-b border-white/10">
+          <Text className={sectionTitleClassName}>Optional Details</Text>
+          <View className="mb-3">
+            <Pressable
+              onPress={() => setShowDescriptionInput(!showDescriptionInput)}
+              className="flex-row justify-between items-center p-3 bg-black/20 rounded-xl mb-2 border border-white/10 active:bg-black/30"
+            >
+              <View className="flex-row items-center">
+                <Ionicons name="document-text-outline" size={16} color="#a1a1aa" />
+                <Text className="text-sm text-zinc-200 ml-2">Description</Text>
+              </View>
+              <Text className="text-blue-200 text-sm">
+                {showDescriptionInput ? "Hide" : description ? "Edit" : "Add"}
+              </Text>
+            </Pressable>
+            {showDescriptionInput && (
+              <TextInput
+                className={`${inputClassName} h-24`}
+                onChangeText={setDescription}
+                value={description}
+                placeholder="Add a description (optional)"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                textAlignVertical="top"
+              />
+            )}
+            {!showDescriptionInput && description ? (
+              <Text className="text-zinc-400 px-3 py-1 text-sm italic">
+                {description}
+              </Text>
+            ) : null}
+          </View>
+          <View>
+            <Pressable
+              onPress={() => setShowLocationInput(!showLocationInput)}
+              className="flex-row justify-between items-center p-3 bg-black/20 rounded-xl mb-2 border border-white/10 active:bg-black/30"
+            >
+              <View className="flex-row items-center">
+                <Ionicons name="location-outline" size={16} color="#a1a1aa" />
+                <Text className="text-sm text-zinc-200 ml-2">Location</Text>
+              </View>
+              <Text className="text-blue-200 text-sm">
+                {showLocationInput ? "Hide" : location ? "Edit" : "Add"}
+              </Text>
+            </Pressable>
+            {showLocationInput && (
+              <TextInput
+                className={inputClassName}
+                onChangeText={setLocation}
+                value={location}
+                placeholder="Add a location (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            )}
+            {!showLocationInput && location ? (
+              <Text className="text-zinc-400 px-3 py-1 text-sm italic">
+                {location}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View className="z-50 overflow-visible">
+          <Text className={sectionTitleClassName}>Invite Friends</Text>
+          <View className="z-40 bg-black/20 rounded-xl p-3 border border-white/10 overflow-visible">
+            <UserInviteMultiselect
+              placeholderText="Select friends to invite"
+              userList={usersToInvite}
+              setUserList={setUsersToInvite}
+              excludedUserList={self ? [self] : []}
+            />
+          </View>
         </View>
       </View>
 
       {/* Create Button */}
-      <View className="z-10 mb-4">
+      <View className="z-10 mt-4 mb-4">
         <Button
           variant="primary"
           size="lg"
-          className="w-full"
+          className="w-full rounded-xl"
           text={isLoading ? "Creating..." : "Create Group"}
           onPress={handleCreateGroup}
           disabled={

@@ -374,12 +374,12 @@ const ChatSettingsMenu = (props: {
     required = false,
   ) => (
     <View className="mb-3">
-      <Text className="text-sm text-gray-400 mb-1">
+      <Text className="text-xs text-zinc-400 mb-1">
         {label}
         {required && " *"}
       </Text>
       <TextInput
-        className={`bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full ${
+        className={`bg-black/20 text-white border border-white/10 rounded-xl px-4 py-3 w-full ${
           multiline ? "h-24" : ""
         }`}
         value={value}
@@ -397,16 +397,19 @@ const ChatSettingsMenu = (props: {
     value: string | null | undefined,
   ) => (
     <View className="mb-3">
-      <Text className="text-sm text-gray-400 mb-1">{label}</Text>
-      <Text className="text-base text-gray-200">
-        {value || <Text className="italic text-gray-500">Not set</Text>}
+      <Text className="text-xs text-zinc-300 mb-1">{label}</Text>
+      <Text className="text-sm text-zinc-100">
+        {value || <Text className="italic text-zinc-500">Not set</Text>}
       </Text>
     </View>
   );
 
+  const cardClassName = "w-full bg-white/5 border border-white/10 rounded-2xl p-4 mb-3";
+  const sectionTitleClassName = "text-sm font-semibold text-blue-200 mb-3";
+
   return (
     <View className={"w-full pb-4"}>
-      <View className="items-center my-4">
+      <View className="items-center mt-2 mb-4">
         <GroupAvatarEditable
           imageURL={currentImageUrlForPreview}
           blurhash={currentBlurhash}
@@ -419,7 +422,7 @@ const ChatSettingsMenu = (props: {
 
       {/* Admin Edit Controls */}
       {currentUserIsAdmin && (
-        <View className="flex-row justify-end mb-4 px-4">
+        <View className="flex-row justify-end mb-4">
           {isEditing ? (
             <>
               <Button
@@ -450,8 +453,8 @@ const ChatSettingsMenu = (props: {
       )}
 
       {/* Group Details Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
+      <View className={cardClassName}>
+        <Text className={sectionTitleClassName}>
           Group Details
         </Text>
         {isEditing && currentUserIsAdmin
@@ -484,7 +487,7 @@ const ChatSettingsMenu = (props: {
           )
         ) : (
           <View className="mb-3">
-            <Text className="text-sm text-gray-400 mb-1">Location</Text>
+            <Text className="text-xs text-zinc-300 mb-1">Location</Text>
             {currentGroup.location ? (
               <TouchableOpacity
                 onPress={() => {
@@ -502,13 +505,13 @@ const ChatSettingsMenu = (props: {
                   color="#60A5FA"
                   className="mr-1"
                 />
-                <Text className="text-base text-blue-400">
+                <Text className="text-sm text-blue-300">
                   {currentGroup.location}
                 </Text>
               </TouchableOpacity>
             ) : (
-              <Text className="text-base text-gray-200">
-                <Text className="italic text-gray-500">Not set</Text>
+              <Text className="text-sm text-zinc-100">
+                <Text className="italic text-zinc-500">Not set</Text>
               </Text>
             )}
           </View>
@@ -516,9 +519,9 @@ const ChatSettingsMenu = (props: {
       </View>
 
       {/* Event Schedule Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
+      <View className={cardClassName}>
         <View className="flex-row justify-between items-center mb-3">
-          <Text className="text-lg font-semibold text-blue-400">
+          <Text className={sectionTitleClassName}>
             Event Schedule{isEditing && currentUserIsAdmin ? " *" : ""}
           </Text>
         </View>
@@ -528,16 +531,16 @@ const ChatSettingsMenu = (props: {
             setDateOptions={setDateOptions}
           />
         ) : (
-          <View className="bg-gray-800 rounded-lg p-3">
-            <View className="mb-1">
-              <Text className="text-sm text-gray-400 mb-1">Starts:</Text>
-              <Text className="text-base font-medium text-gray-200">
+          <View className="bg-black/20 rounded-xl p-3 border border-white/10">
+            <View className="mb-2">
+              <Text className="text-xs text-zinc-300 mb-1">Starts</Text>
+              <Text className="text-sm font-medium text-zinc-100">
                 {formatDate(dateOptions.startTime)}
               </Text>
             </View>
             <View>
-              <Text className="text-sm text-gray-400 mb-1">Ends:</Text>
-              <Text className="text-base font-medium text-gray-200">
+              <Text className="text-xs text-zinc-300 mb-1">Ends</Text>
+              <Text className="text-sm font-medium text-zinc-100">
                 {formatDate(dateOptions.endTime)}
               </Text>
             </View>
@@ -546,12 +549,12 @@ const ChatSettingsMenu = (props: {
       </View>
 
       {/* Notification Settings Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
+      <View className={cardClassName}>
+        <Text className={sectionTitleClassName}>
           Notifications
         </Text>
-        <View className="flex-row justify-between items-center bg-gray-800 rounded-lg p-3">
-          <Text className="text-base text-gray-200">Mute Notifications</Text>
+        <View className="flex-row justify-between items-center bg-black/20 rounded-xl p-3 border border-white/10">
+          <Text className="text-sm text-zinc-100">Mute Notifications</Text>
           <Switch
             value={isMuted}
             onValueChange={handleToggleMute}
@@ -563,13 +566,13 @@ const ChatSettingsMenu = (props: {
       </View>
 
       {/* Group Members Card */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
+      <View className={cardClassName}>
+        <Text className={sectionTitleClassName}>
           {/* *** Use currentGroup for member count *** */}
           {currentGroup.group_users.length}{" "}
           {currentGroup.group_users.length === 1 ? "Member" : "Members"}
         </Text>
-        <View className="bg-gray-800 rounded-lg p-1">
+        <View className="bg-black/20 rounded-xl p-1 border border-white/10">
           <UserList
             group={currentGroup}
             currentUserIsAdmin={currentUserIsAdmin}
@@ -580,8 +583,8 @@ const ChatSettingsMenu = (props: {
 
       {/* Share Invite Link Card */}
       {currentUserIsAdmin && (
-        <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-          <Text className="text-lg font-semibold text-blue-400 mb-3">
+        <View className={cardClassName}>
+          <Text className={sectionTitleClassName}>
             Share Invite Link
           </Text>
           <Button
@@ -604,11 +607,11 @@ const ChatSettingsMenu = (props: {
 
       {/* User Invite Card */}
       {currentUserIsAdmin && (
-        <View className="w-full z-30 bg-gray-900 rounded-xl shadow-md p-4 mb-4 overflow-visible">
-          <Text className="text-lg font-semibold text-blue-400 mb-3">
+        <View className={`${cardClassName} z-30 overflow-visible`}>
+          <Text className={sectionTitleClassName}>
             Invite Friends
           </Text>
-          <View className="z-20 bg-gray-800 rounded-lg p-3 overflow-visible">
+          <View className="z-20 bg-black/20 rounded-xl p-3 border border-white/10 overflow-visible">
             <UserInviteMultiselect
               placeholderText="Select friends to invite"
               userList={usersToInvite}
@@ -632,11 +635,11 @@ const ChatSettingsMenu = (props: {
       )}
 
       {/* Leave Group - visible to all members */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4 border border-red-500/25">
-        <Text className="text-lg font-semibold text-red-300 mb-1">
+      <View className="w-full bg-red-950/15 rounded-2xl p-4 mt-1 mb-4 border border-red-400/25">
+        <Text className="text-base font-semibold text-red-300 mb-1">
           Leave Group
         </Text>
-        <Text className="text-sm text-gray-400 mb-3">
+        <Text className="text-sm text-zinc-400 mb-3">
           This removes you from the group. You can rejoin only if invited again.
         </Text>
         <Button
