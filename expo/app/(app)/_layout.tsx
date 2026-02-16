@@ -212,6 +212,7 @@ const AppLayout = () => {
 
   return (
     <Tabs
+      initialRouteName="groups"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -240,20 +241,6 @@ const AppLayout = () => {
       }}
     >
       <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarLabel: "Home",
-          tabBarIcon: ({ focused, color }) => (
-            <Ionicons
-              size={22}
-              name={focused ? "home" : "home-outline"}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="groups"
         options={{
           title: "Groups",
@@ -262,6 +249,41 @@ const AppLayout = () => {
             <Ionicons
               size={22}
               name={focused ? "chatbubbles" : "chatbubbles-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "Settings",
+          tabBarLabel: "Settings",
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons
+              size={22}
+              name={focused ? "settings" : "settings-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="dev"
+        options={{
+          title: "Dev",
+          tabBarLabel: "Dev",
+          href: __DEV__ ? undefined : null,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons
+              size={22}
+              name={focused ? "construct" : "construct-outline"}
               color={color}
             />
           ),
