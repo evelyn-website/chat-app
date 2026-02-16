@@ -54,9 +54,11 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         } catch (error) {
           if (isAxiosError(error)) {
             const status = error.response?.status;
-            // Terminal invite failures should not retry on every login.
+            // Terminal invite failures: clear stored code and handle silently.
+            // 403 = forbidden, 404 = invite not found, 410 = expired or max uses.
             if (status === 403 || status === 404 || status === 410) {
               await AsyncStorage.removeItem("pendingInviteCode");
+              return;
             }
           }
           throw error;

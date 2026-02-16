@@ -13,6 +13,7 @@ const GroupPage = () => {
 
   const [allGroups, setAllGroups] = useState<Group[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNavigatingAway, setIsNavigatingAway] = useState(false);
 
   useEffect(() => {
     if (!store || !id) {
@@ -102,6 +103,7 @@ const GroupPage = () => {
 
   useEffect(() => {
     if (!isLoading && currentGroup === null) {
+      setIsNavigatingAway(true);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -123,10 +125,11 @@ const GroupPage = () => {
     );
   }
 
-  if (!currentGroup) {
+  if (isNavigatingAway || !currentGroup) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-900">
-        <Text className="text-lg text-red-400">Group not found.</Text>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text className="mt-2.5 text-base text-gray-100">Returning to groups...</Text>
       </View>
     );
   }

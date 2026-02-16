@@ -16,6 +16,7 @@ import UserList from "./UserList";
 import Button from "../Global/Button/Button";
 import UserInviteMultiselect from "../Global/Multiselect/UserInviteMultiselect";
 import { useGlobalStore } from "../context/GlobalStoreContext";
+import { useMessageStore } from "../context/MessageStoreContext";
 import { useWebSocket } from "../context/WebSocketContext";
 import { router } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -39,9 +40,11 @@ const ChatSettingsMenu = (props: {
     inviteUsersToGroup,
     updateGroup,
     getGroups,
+    leaveGroup,
     toggleGroupMuted,
     createInviteLink,
   } = useWebSocket();
+  const { removeGroupMessages } = useMessageStore();
 
   const [currentGroup, setCurrentGroup] = useState<Group>(initialGroup);
 
@@ -84,6 +87,7 @@ const ChatSettingsMenu = (props: {
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   useEffect(() => {
     setCurrentGroup(initialGroup);
@@ -307,6 +311,49 @@ const ChatSettingsMenu = (props: {
     setCurrentImageUrlForPreview("");
     setCurrentBlurhash("");
   }, []);
+
+  const handleLeaveGroup = useCallback(() => {
+    Alert.alert(
+      "Leave Group?",
+      "You will no longer be able to see messages or participate in this group. You can rejoin if someone invites you again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            if (isLeaving) return;
+            setIsLeaving(true);
+            try {
+              await leaveGroup(currentGroup.id);
+              const allGroups = await getGroups();
+              await store.saveGroups(allGroups);
+              removeGroupMessages(currentGroup.id);
+              refreshGroups();
+              router.back();
+            } catch (error) {
+              console.error("Error leaving group:", error);
+              Alert.alert(
+                "Leave Failed",
+                "Could not leave the group. Please try again."
+              );
+            } finally {
+              setIsLeaving(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [
+    currentGroup.id,
+    isLeaving,
+    leaveGroup,
+    getGroups,
+    store,
+    removeGroupMessages,
+    refreshGroups,
+  ]);
+
   const formatDate = (date: Date | null) => {
     if (!date) return "Not set";
     return date.toLocaleDateString(undefined, {
@@ -583,6 +630,26 @@ const ChatSettingsMenu = (props: {
           )}
         </View>
       )}
+
+      {/* Leave Group - visible to all members */}
+      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4 border border-red-500/25">
+        <Text className="text-lg font-semibold text-red-300 mb-1">
+          Leave Group
+        </Text>
+        <Text className="text-sm text-gray-400 mb-3">
+          This removes you from the group. You can rejoin only if invited again.
+        </Text>
+        <Button
+          variant="outline"
+          size="lg"
+          className="w-full border-red-500/70 active:bg-red-500/10"
+          textClassName="text-red-300"
+          text={isLeaving ? "Leaving..." : "Leave Group"}
+          onPress={handleLeaveGroup}
+          disabled={isLeaving}
+          leftIcon={<Ionicons name="exit-outline" size={18} color="#fca5a5" />}
+        />
+      </View>
     </View>
   );
 };

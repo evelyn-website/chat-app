@@ -12,6 +12,12 @@ jest.mock("../context/GlobalStoreContext", () => ({
   }),
 }));
 
+jest.mock("../context/MessageStoreContext", () => ({
+  useMessageStore: () => ({
+    removeGroupMessages: jest.fn(),
+  }),
+}));
+
 const mockToggleGroupMuted = jest.fn();
 
 jest.mock("../context/WebSocketContext", () => ({
@@ -19,7 +25,9 @@ jest.mock("../context/WebSocketContext", () => ({
     inviteUsersToGroup: jest.fn().mockResolvedValue({ skipped_users: [] }),
     updateGroup: jest.fn(),
     getGroups: jest.fn().mockResolvedValue([]),
+    leaveGroup: jest.fn().mockResolvedValue(undefined),
     toggleGroupMuted: mockToggleGroupMuted,
+    createInviteLink: jest.fn().mockResolvedValue({ invite_url: "" }),
   }),
 }));
 
