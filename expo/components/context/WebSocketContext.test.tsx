@@ -2,6 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { WebSocketProvider, useWebSocket } from './WebSocketContext';
+import type { BlockedUser } from '@/types/types';
 
 // Mock dependencies
 jest.mock('@/util/custom-axios', () => ({
@@ -518,7 +519,7 @@ describe('WebSocketContext', () => {
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      let response: any;
+      let response: BlockedUser[];
       await act(async () => {
         response = await result.current.getBlockedUsers();
       });
@@ -536,7 +537,7 @@ describe('WebSocketContext', () => {
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      let response: any;
+      let response: BlockedUser[];
       await act(async () => {
         response = await result.current.getBlockedUsers();
       });
