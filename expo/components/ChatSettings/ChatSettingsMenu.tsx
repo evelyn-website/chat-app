@@ -632,17 +632,22 @@ const ChatSettingsMenu = (props: {
       )}
 
       {/* Leave Group - visible to all members */}
-      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
-        <Text className="text-lg font-semibold text-blue-400 mb-3">
+      <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4 border border-red-500/25">
+        <Text className="text-lg font-semibold text-red-300 mb-1">
           Leave Group
         </Text>
+        <Text className="text-sm text-gray-400 mb-3">
+          This removes you from the group. You can rejoin only if invited again.
+        </Text>
         <Button
-          variant="secondary"
+          variant="outline"
           size="lg"
-          className="w-full bg-red-900/80 active:bg-red-800"
+          className="w-full border-red-500/70 active:bg-red-500/10"
+          textClassName="text-red-300"
           text={isLeaving ? "Leaving..." : "Leave Group"}
           onPress={handleLeaveGroup}
           disabled={isLeaving}
+          leftIcon={<Ionicons name="exit-outline" size={18} color="#fca5a5" />}
         />
       </View>
     </View>

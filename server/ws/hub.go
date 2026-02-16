@@ -380,6 +380,24 @@ func (h *Hub) handleUserRemovedFromGroupEvent(userID uuid.UUID, groupID uuid.UUI
 		client.RemoveGroup(groupID)
 		log.Printf("Hub %s: Updated local state for user %s removed from group %s", h.serverID, userID.String(), groupID.String())
 	}
+
+	// Notify remaining members on this instance to refresh group membership.
+	if originServerID != h.serverID {
+		if group, exists := h.Groups[groupID]; exists {
+			group.mutex.RLock()
+			for _, c := range group.Clients {
+				if c.User.ID == userID {
+					continue
+				}
+				select {
+				case c.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: groupID}:
+				default:
+					log.Printf("Hub %s: Events channel full for client %s on group_updated after removal for group %s", h.serverID, c.User.ID.String(), groupID.String())
+				}
+			}
+			group.mutex.RUnlock()
+		}
+	}
 }
 
 func (h *Hub) handleGroupCreatedEvent(groupID uuid.UUID, name string, adminID uuid.UUID) {
@@ -662,6 +680,21 @@ func (h *Hub) Run() {
 					default:
 						log.Printf("Hub %s: Events channel full for client %s on user_removed (direct) for group %s", h.serverID, removeMsg.UserID.String(), removeMsg.GroupID.String())
 					}
+				}
+				// Notify remaining local members so they refresh member lists.
+				if group, exists := h.Groups[removeMsg.GroupID]; exists {
+					group.mutex.RLock()
+					for _, client := range group.Clients {
+						if client.User.ID == removeMsg.UserID {
+							continue
+						}
+						select {
+						case client.Events <- &ClientEvent{Type: "group_event", Event: "group_updated", GroupID: removeMsg.GroupID}:
+						default:
+							log.Printf("Hub %s: Events channel full for client %s on group_updated (direct) for group %s", h.serverID, client.User.ID.String(), removeMsg.GroupID.String())
+						}
+					}
+					group.mutex.RUnlock()
 				}
 				h.mutex.RUnlock()
 			}
