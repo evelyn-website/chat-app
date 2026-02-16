@@ -188,10 +188,17 @@ const ChatSettingsMenu = (props: {
     if (usersToInvite.length === 0) return;
     setIsLoadingInvite(true);
     try {
-      await inviteUsersToGroup(usersToInvite, currentGroup.id);
+      const result = await inviteUsersToGroup(usersToInvite, currentGroup.id);
 
       setUsersToInvite([]);
       await syncWithServerAndGlobalStore();
+
+      if (result.skipped_users && result.skipped_users.length > 0) {
+        Alert.alert(
+          "Some Users Not Invited",
+          `The following users were not invited due to a block conflict: ${result.skipped_users.join(", ")}`,
+        );
+      }
     } catch (error) {
       console.error("Error inviting users:", error);
       Alert.alert("Invite Failed", "Could not invite users. Please try again.");

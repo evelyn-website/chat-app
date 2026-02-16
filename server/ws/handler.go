@@ -191,6 +191,17 @@ func (h *Handler) BlockUser(c *gin.Context) {
 		return
 	}
 
+	_, err = h.db.GetUserById(ctx, req.UserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		log.Printf("Error looking up user %s for block: %v", req.UserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to look up user"})
+		return
+	}
+
 	tx, err := h.conn.Begin(ctx)
 	if err != nil {
 		log.Printf("Failed to begin transaction for blocking user: %v", err)
@@ -419,20 +430,19 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 		case h.hub.AddUserToGroupChan <- &AddClientToGroupMsg{UserID: userID, GroupID: req.GroupID}:
 			log.Printf("Sent request to hub to process user %s addition to group %s", userID.String(), req.GroupID.String())
 		case <-ctx.Done():
-			log.Printf("Context cancelled while trying to send AddUserToGroupChan for user %d, group %d", userID, req.GroupID)
+			log.Printf("Context cancelled while trying to send AddUserToGroupChan for user %s, group %s", userID, req.GroupID)
 			return
 		default:
-			log.Printf("Warning: Hub AddUserToGroupChan is full. Update for user %d group %d might be delayed or dropped.", userID, req.GroupID)
+			log.Printf("Warning: Hub AddUserToGroupChan is full. Update for user %s group %s might be delayed or dropped.", userID, req.GroupID)
 		}
 	}
-	if len(skippedUsers) > 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"invites":       successfulInvites,
-			"skipped_users": skippedUsers,
-		})
-		return
+	if skippedUsers == nil {
+		skippedUsers = []string{}
 	}
-	c.JSON(http.StatusOK, successfulInvites)
+	c.JSON(http.StatusOK, gin.H{
+		"invites":       successfulInvites,
+		"skipped_users": skippedUsers,
+	})
 }
 
 func (h *Handler) RemoveUserFromGroup(c *gin.Context) {

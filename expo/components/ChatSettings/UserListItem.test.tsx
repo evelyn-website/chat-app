@@ -273,7 +273,7 @@ describe("UserListItem", () => {
   describe("kick user", () => {
     it("shows kick button when current user is admin and target is not admin/self", () => {
       const user = makeUser({ username: "Bob" });
-      const { UNSAFE_getByType } = render(
+      const { getByTestId } = render(
         <UserListItem
           user={user}
           group={makeGroup()}
@@ -283,10 +283,7 @@ describe("UserListItem", () => {
         />
       );
 
-      // The kick icon (close-circle-outline) should be rendered
-      const Ionicons = require("@expo/vector-icons/Ionicons");
-      // Can't easily query mock components, but we can verify no crash
-      expect(true).toBe(true);
+      expect(getByTestId("kick-button-Bob")).toBeTruthy();
     });
 
     it("does not show kick button when current user is not admin", () => {

@@ -135,6 +135,7 @@ const UserListItem = (props: UserListItemProps) => {
 
         {canKickUser && (
           <Pressable
+            testID={`kick-button-${user.username}`}
             disabled={isKicking}
             className={`w-8 h-8 rounded-full items-center justify-center active:bg-gray-700 ${
               isKicking ? "opacity-50" : ""

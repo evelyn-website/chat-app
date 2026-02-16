@@ -44,7 +44,7 @@ interface WebSocketContextType {
     id: string,
     updateParams: UpdateGroupParams,
   ) => Promise<Group | undefined>;
-  inviteUsersToGroup: (emails: string[], group_id: string) => void;
+  inviteUsersToGroup: (emails: string[], group_id: string) => Promise<{ skipped_users: string[] }>;
   removeUserFromGroup: (email: string, group_id: string) => void;
   leaveGroup: (group_id: string) => void;
   getGroups: () => Promise<Group[]>;
@@ -412,16 +412,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const inviteUsersToGroup = useCallback(
-    async (emails: string[], group_id: string): Promise<any> => {
-      // TODO: define a more specific return type
-      return http
-        .post(`${httpBaseURL}/invite-users-to-group`, {
-          group_id: group_id,
-          emails: emails,
-        })
-        .catch((error) => {
-          console.error("Error inviting users:", error);
-        });
+    async (emails: string[], group_id: string): Promise<{ skipped_users: string[] }> => {
+      const response = await http.post(`${httpBaseURL}/invite-users-to-group`, {
+        group_id: group_id,
+        emails: emails,
+      });
+      return response.data as { skipped_users: string[] };
     },
     [],
   );
