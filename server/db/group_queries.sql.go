@@ -195,6 +195,7 @@ JOIN users u ON u.id = ug.user_id
 JOIN user_groups ug2 ON ug2.group_id = groups.id
 JOIN users u2 ON u2.id = ug2.user_id
 WHERE u.id = $1 AND groups.deleted_at IS NULL AND ug.deleted_at IS NULL AND ug2.deleted_at IS NULL
+  AND (groups.end_time IS NULL OR groups.end_time > NOW())
 GROUP BY groups.id, ug.id, u.id
 `
 
