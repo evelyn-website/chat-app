@@ -88,7 +88,7 @@ export default function UserInviteMultiselect({
       <UserMultiSelect
         placeholderText={placeholderText}
         tags={userList ?? []}
-        options={contacts! ?? []}
+        options={contacts ?? []}
         setTags={setUserList}
         excludedUserList={excludedUserList ?? []}
       />

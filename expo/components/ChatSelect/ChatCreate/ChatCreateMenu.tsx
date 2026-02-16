@@ -55,7 +55,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
     if (!groupName.trim() || !dateOptions.startTime || !dateOptions.endTime) {
       Alert.alert(
         "Missing Information",
-        "Please provide a group name and set the event schedule."
+        "Please provide a group name and set the event schedule.",
       );
       return;
     }
@@ -71,12 +71,15 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
         description,
         location,
         currentImageUrlForPreview,
-        currentBlurhash
+        currentBlurhash,
       );
 
       if (createdGroup) {
         if (usersToInvite.length > 0) {
-          const result = await inviteUsersToGroup(usersToInvite, createdGroup.id);
+          const result = await inviteUsersToGroup(
+            usersToInvite,
+            createdGroup.id,
+          );
           if (result.skipped_users && result.skipped_users.length > 0) {
             Alert.alert(
               "Some Users Not Invited",
@@ -99,14 +102,14 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
         console.error("Group creation returned undefined.");
         Alert.alert(
           "Creation Failed",
-          "Could not create the group. Please try again."
+          "Could not create the group. Please try again.",
         );
       }
     } catch (error) {
-      console.error("Error durlng group creation process:", error);
+      console.error("Error during group creation process:", error);
       Alert.alert(
         "Error",
-        "An unexpected error occurred durlng group creation."
+        "An unexpected error occurred during group creation.",
       );
     } finally {
       setIsLoading(false);
@@ -134,7 +137,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
     if (permissionResult.granted === false) {
       Alert.alert(
         "Permission Required",
-        "You've refused to allow this app to access your photos."
+        "You've refused to allow this app to access your photos.",
       );
       return;
     }
@@ -158,10 +161,10 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
         setCurrentBlurhash(blurhash);
         setCurrentImageUrlForPreview(imageURL);
       } catch (error) {
-        console.error("ChatSettingsMenu:", error);
+        console.error("ChatCreateMenu:", error);
         Alert.alert(
           "Upload Failed",
-          "Could not upload image. Please try again."
+          "Could not upload image. Please try again.",
         );
       }
     }
@@ -172,7 +175,8 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
     setCurrentBlurhash(null);
   }, []);
 
-  const panelClassName = "w-full rounded-2xl border border-white/10 bg-white/5 p-4";
+  const panelClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/5 p-4";
   const sectionTitleClassName = "text-sm font-semibold text-blue-200 mb-3";
   const inputClassName =
     "bg-black/20 text-white border border-white/10 rounded-xl px-4 py-3 w-full";
@@ -214,43 +218,46 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
               textClassName="text-blue-200"
             />
           </View>
-          {!showDateOptions && (dateOptions.startTime || dateOptions.endTime) && (
-            <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
-              <View className="mb-2 flex-row items-start">
-                <Ionicons
-                  name="play-circle-outline"
-                  size={18}
-                  color="#bfdbfe"
-                  style={{ marginTop: 2, marginRight: 8 }}
-                />
-                <View className="flex-1">
-                  <Text className="text-xs text-zinc-300 mb-1">Starts</Text>
-                  <Text className="text-sm font-medium text-zinc-100">
-                    {formatDate(dateOptions.startTime)}
-                  </Text>
+          {!showDateOptions &&
+            (dateOptions.startTime || dateOptions.endTime) && (
+              <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
+                <View className="mb-2 flex-row items-start">
+                  <Ionicons
+                    name="play-circle-outline"
+                    size={18}
+                    color="#bfdbfe"
+                    style={{ marginTop: 2, marginRight: 8 }}
+                  />
+                  <View className="flex-1">
+                    <Text className="text-xs text-zinc-300 mb-1">Starts</Text>
+                    <Text className="text-sm font-medium text-zinc-100">
+                      {formatDate(dateOptions.startTime)}
+                    </Text>
+                  </View>
+                </View>
+                <View className="flex-row items-start">
+                  <Ionicons
+                    name="stop-circle-outline"
+                    size={18}
+                    color="#bfdbfe"
+                    style={{ marginTop: 2, marginRight: 8 }}
+                  />
+                  <View className="flex-1">
+                    <Text className="text-xs text-zinc-300 mb-1">Ends</Text>
+                    <Text className="text-sm font-medium text-zinc-100">
+                      {formatDate(dateOptions.endTime)}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <View className="flex-row items-start">
-                <Ionicons
-                  name="stop-circle-outline"
-                  size={18}
-                  color="#bfdbfe"
-                  style={{ marginTop: 2, marginRight: 8 }}
-                />
-                <View className="flex-1">
-                  <Text className="text-xs text-zinc-300 mb-1">Ends</Text>
-                  <Text className="text-sm font-medium text-zinc-100">
-                    {formatDate(dateOptions.endTime)}
-                  </Text>
-                </View>
+            )}
+          {!showDateOptions &&
+            !dateOptions.startTime &&
+            !dateOptions.endTime && (
+              <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
+                <Text className="text-sm text-zinc-300">No schedule set</Text>
               </View>
-            </View>
-          )}
-          {!showDateOptions && !dateOptions.startTime && !dateOptions.endTime && (
-            <View className="bg-black/20 rounded-xl p-3 mb-2 border border-white/10">
-              <Text className="text-sm text-zinc-300">No schedule set</Text>
-            </View>
-          )}
+            )}
           {showDateOptions && (
             <GroupDateOptions
               dateOptions={dateOptions}
@@ -266,7 +273,11 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
               className="flex-row justify-between items-center p-3 bg-black/20 rounded-xl mb-2 border border-white/10 active:bg-black/30"
             >
               <View className="flex-row items-center">
-                <Ionicons name="document-text-outline" size={16} color="#a1a1aa" />
+                <Ionicons
+                  name="document-text-outline"
+                  size={16}
+                  color="#a1a1aa"
+                />
                 <Text className="text-sm text-zinc-200 ml-2">
                   Description (optional)
                 </Text>
