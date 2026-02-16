@@ -61,6 +61,9 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	wsRoutes.POST("/leave-group/:groupID", wsHandler.LeaveGroup)
 	wsRoutes.GET("/relevant-users", wsHandler.GetRelevantUsers)
 	wsRoutes.GET("/relevant-messages", wsHandler.GetRelevantMessages)
+	wsRoutes.POST("/block-user", wsHandler.BlockUser)
+	wsRoutes.POST("/unblock-user", wsHandler.UnblockUser)
+	wsRoutes.GET("/blocked-users", wsHandler.GetBlockedUsers)
 
 	// authenticated after upgrade
 	r.GET("/ws/establish-connection", wsHandler.EstablishConnection)

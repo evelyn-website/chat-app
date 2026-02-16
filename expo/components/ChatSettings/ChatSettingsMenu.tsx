@@ -1,4 +1,13 @@
-import { Text, View, TextInput, Alert, Linking, Platform, TouchableOpacity, Switch } from "react-native";
+import {
+  Text,
+  View,
+  TextInput,
+  Alert,
+  Linking,
+  Platform,
+  TouchableOpacity,
+  Switch,
+} from "react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import type { Group, UpdateGroupParams, DateOptions } from "@/types/types";
 import UserList from "./UserList";
@@ -24,23 +33,24 @@ const ChatSettingsMenu = (props: {
   const { store, refreshGroups } = useGlobalStore();
   const currentUserIsAdmin = initialGroup.admin;
 
-  const { inviteUsersToGroup, updateGroup, getGroups, toggleGroupMuted } = useWebSocket();
+  const { inviteUsersToGroup, updateGroup, getGroups, toggleGroupMuted } =
+    useWebSocket();
 
   const [currentGroup, setCurrentGroup] = useState<Group>(initialGroup);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editableName, setEditableName] = useState(initialGroup.name);
   const [editableDescription, setEditableDescription] = useState(
-    initialGroup.description || ""
+    initialGroup.description || "",
   );
   const [editableLocation, setEditableLocation] = useState(
-    initialGroup.location || ""
+    initialGroup.location || "",
   );
   const [currentImageUrlForPreview, setCurrentImageUrlForPreview] = useState<
     string | null
   >(initialGroup.image_url ?? null);
   const [currentBlurhash, setCurrentBlurhash] = useState<string | null>(
-    initialGroup.blurhash ?? null
+    initialGroup.blurhash ?? null,
   );
 
   const { uploadImage, isUploading } = useUploadImageClear();
@@ -51,7 +61,7 @@ const ChatSettingsMenu = (props: {
       const timestamp = Date.parse(dateString);
       return isNaN(timestamp) ? null : new Date(timestamp);
     },
-    []
+    [],
   );
 
   const [dateOptions, setDateOptions] = useState<DateOptions>({
@@ -95,7 +105,7 @@ const ChatSettingsMenu = (props: {
       await store.saveGroups(allGroups);
 
       const latestVersionOfCurrentGroup = allGroups.find(
-        (g) => g.id === currentGroup.id
+        (g) => g.id === currentGroup.id,
       );
 
       if (latestVersionOfCurrentGroup) {
@@ -103,7 +113,7 @@ const ChatSettingsMenu = (props: {
         refreshGroups();
       } else {
         console.warn(
-          "Current group not found after sync, it might have been deleted."
+          "Current group not found after sync, it might have been deleted.",
         );
         router.back();
       }
@@ -188,10 +198,17 @@ const ChatSettingsMenu = (props: {
     if (usersToInvite.length === 0) return;
     setIsLoadingInvite(true);
     try {
-      await inviteUsersToGroup(usersToInvite, currentGroup.id);
+      const result = await inviteUsersToGroup(usersToInvite, currentGroup.id);
 
       setUsersToInvite([]);
       await syncWithServerAndGlobalStore();
+
+      if (result.skipped_users && result.skipped_users.length > 0) {
+        Alert.alert(
+          "Some Users Not Invited",
+          `The following users could not be invited at this time: ${result.skipped_users.join(", ")}`,
+        );
+      }
     } catch (error) {
       console.error("Error inviting users:", error);
       Alert.alert("Invite Failed", "Could not invite users. Please try again.");
@@ -210,7 +227,7 @@ const ChatSettingsMenu = (props: {
     if (permissionResult.granted === false) {
       Alert.alert(
         "Permission Required",
-        "You've refused to allow this app to access your photos."
+        "You've refused to allow this app to access your photos.",
       );
       return;
     }
@@ -237,7 +254,7 @@ const ChatSettingsMenu = (props: {
         console.error("ChatSettingsMenu:", error);
         Alert.alert(
           "Upload Failed",
-          "Could not upload image. Please try again."
+          "Could not upload image. Please try again.",
         );
       }
     }
@@ -283,7 +300,7 @@ const ChatSettingsMenu = (props: {
     setter: (text: string) => void,
     placeholder: string,
     multiline = false,
-    required = false
+    required = false,
   ) => (
     <View className="mb-3">
       <Text className="text-sm text-gray-400 mb-1">
@@ -306,7 +323,7 @@ const ChatSettingsMenu = (props: {
 
   const renderDisplayField = (
     label: string,
-    value: string | null | undefined
+    value: string | null | undefined,
   ) => (
     <View className="mb-3">
       <Text className="text-sm text-gray-400 mb-1">{label}</Text>
@@ -373,7 +390,7 @@ const ChatSettingsMenu = (props: {
               setEditableName,
               "Enter group name",
               false,
-              true
+              true,
             )
           : renderDisplayField("Group Name", currentGroup.name)}
 
@@ -383,41 +400,48 @@ const ChatSettingsMenu = (props: {
               editableDescription,
               setEditableDescription,
               "Enter description (optional)",
-              true
+              true,
             )
           : renderDisplayField("Description", currentGroup.description)}
 
-        {isEditing && currentUserIsAdmin
-          ? renderEditableField(
-              "Location",
-              editableLocation,
-              setEditableLocation,
-              "Enter location (optional)"
-            )
-          : (
-            <View className="mb-3">
-              <Text className="text-sm text-gray-400 mb-1">Location</Text>
-              {currentGroup.location ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    const url =
-                      Platform.OS === "ios"
-                        ? `https://maps.apple.com/?q=${encodeURIComponent(currentGroup.location!)}`
-                        : `https://maps.google.com/?q=${encodeURIComponent(currentGroup.location!)}`;
-                    Linking.openURL(url);
-                  }}
-                  className="flex-row items-center"
-                >
-                  <Ionicons name="location-outline" size={16} color="#60A5FA" className="mr-1" />
-                  <Text className="text-base text-blue-400">{currentGroup.location}</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text className="text-base text-gray-200">
-                  <Text className="italic text-gray-500">Not set</Text>
+        {isEditing && currentUserIsAdmin ? (
+          renderEditableField(
+            "Location",
+            editableLocation,
+            setEditableLocation,
+            "Enter location (optional)",
+          )
+        ) : (
+          <View className="mb-3">
+            <Text className="text-sm text-gray-400 mb-1">Location</Text>
+            {currentGroup.location ? (
+              <TouchableOpacity
+                onPress={() => {
+                  const url =
+                    Platform.OS === "ios"
+                      ? `https://maps.apple.com/?q=${encodeURIComponent(currentGroup.location!)}`
+                      : `https://maps.google.com/?q=${encodeURIComponent(currentGroup.location!)}`;
+                  Linking.openURL(url);
+                }}
+                className="flex-row items-center"
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={16}
+                  color="#60A5FA"
+                  className="mr-1"
+                />
+                <Text className="text-base text-blue-400">
+                  {currentGroup.location}
                 </Text>
-              )}
-            </View>
-          )}
+              </TouchableOpacity>
+            ) : (
+              <Text className="text-base text-gray-200">
+                <Text className="italic text-gray-500">Not set</Text>
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Event Schedule Card */}

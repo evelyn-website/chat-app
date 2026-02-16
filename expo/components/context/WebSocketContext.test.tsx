@@ -2,6 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { WebSocketProvider, useWebSocket } from './WebSocketContext';
+import type { BlockedUser } from '@/types/types';
 
 // Mock dependencies
 jest.mock('@/util/custom-axios', () => ({
@@ -187,9 +188,6 @@ describe('WebSocketContext', () => {
       await act(() => {
         jest.advanceTimersByTime(500);
       });
-
-      // No crash, provider still functional
-      expect(true).toBe(true);
     });
 
     it('should not attempt reconnection on repeated connected events', async () => {
@@ -440,6 +438,131 @@ describe('WebSocketContext', () => {
 
       expect(response).toBeUndefined();
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('blockUser', () => {
+    it('should call POST on the block-user endpoint', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.post.mockResolvedValue({ data: { message: 'User blocked', removed_from_groups: ['g1'] } });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      let response: { removed_from_groups?: string[] };
+      await act(async () => {
+        response = await result.current.blockUser('user-123');
+      });
+
+      expect(http.post).toHaveBeenCalledWith(
+        expect.stringContaining('/ws/block-user'),
+        { user_id: 'user-123' }
+      );
+      expect(response!.removed_from_groups).toEqual(['g1']);
+    });
+
+    it('should propagate errors on failure', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.post.mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await expect(
+        act(async () => {
+          await result.current.blockUser('user-123');
+        })
+      ).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('unblockUser', () => {
+    it('should call POST on the unblock-user endpoint', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.post.mockResolvedValue({ data: { message: 'User unblocked' } });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await act(async () => {
+        await result.current.unblockUser('user-456');
+      });
+
+      expect(http.post).toHaveBeenCalledWith(
+        expect.stringContaining('/ws/unblock-user'),
+        { user_id: 'user-456' }
+      );
+    });
+
+    it('should propagate errors on failure', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.post.mockRejectedValue(new Error('Server error'));
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await expect(
+        act(async () => {
+          await result.current.unblockUser('user-456');
+        })
+      ).rejects.toThrow('Server error');
+    });
+  });
+
+  describe('getBlockedUsers', () => {
+    it('should call GET on the blocked-users endpoint', async () => {
+      const http = require('@/util/custom-axios').default;
+      const blockedUsers = [
+        { id: 'u1', username: 'blocked1', email: 'b1@test.com', blocked_at: '2025-01-01T00:00:00Z' },
+        { id: 'u2', username: 'blocked2', email: 'b2@test.com', blocked_at: '2025-01-02T00:00:00Z' },
+      ];
+      http.get.mockResolvedValue({ data: blockedUsers });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      let response: BlockedUser[];
+      await act(async () => {
+        response = await result.current.getBlockedUsers();
+      });
+
+      expect(http.get).toHaveBeenCalledWith(
+        expect.stringContaining('/ws/blocked-users')
+      );
+      expect(response).toEqual(blockedUsers);
+      expect(response).toHaveLength(2);
+    });
+
+    it('should return empty array when no users are blocked', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.get.mockResolvedValue({ data: [] });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      let response: BlockedUser[];
+      await act(async () => {
+        response = await result.current.getBlockedUsers();
+      });
+
+      expect(response).toEqual([]);
+    });
+
+    it('should propagate errors on failure', async () => {
+      const http = require('@/util/custom-axios').default;
+      http.get.mockRejectedValue(new Error('Unauthorized'));
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await expect(
+        act(async () => {
+          await result.current.getBlockedUsers();
+        })
+      ).rejects.toThrow('Unauthorized');
+    });
+  });
+
+  describe('block user context integration', () => {
+    it('should provide blockUser, unblockUser, and getBlockedUsers functions', () => {
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      expect(typeof result.current.blockUser).toBe('function');
+      expect(typeof result.current.unblockUser).toBe('function');
+      expect(typeof result.current.getBlockedUsers).toBe('function');
     });
   });
 

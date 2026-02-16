@@ -17,7 +17,7 @@ export interface RecipientDevicePublicKey {
   publicKey: Uint8Array;
 }
 
-export type GroupAdminMap = Map<string, boolean>;
+export type GroupAdminMap = Record<string, boolean>;
 
 export type GroupUser = User & { admin: boolean; invited_at?: string };
 
@@ -165,6 +165,13 @@ export type DateOptions = {
 export type PickerImageResult = {
   url: string;
   base64: string;
+};
+
+export type BlockedUser = {
+  id: string;
+  username: string;
+  email: string;
+  blocked_at: string;
 };
 
 export type GroupEvent = {

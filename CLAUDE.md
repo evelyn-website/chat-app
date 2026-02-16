@@ -65,6 +65,12 @@ make expo-start
 # Run linter
 make expo-lint
 
+# Check for TypeScript errors (run from expo/)
+npx tsc --noEmit
+
+# Check for ESLint errors on specific files (run from expo/)
+npx eslint <file-path>
+
 # iOS development build
 make expo-ios-dev
 
@@ -401,6 +407,7 @@ Get IP address: Run `npx expo start` in `expo/`, look for `Metro waiting on exp:
 
 **Client:**
 - Lint: `make expo-lint`
+- **Always check for lint/type errors after editing Expo files** by running `npx eslint <files>` and `npx tsc --noEmit` from `expo/`. Do not rely solely on IDE diagnostics.
 
 **Server:**
 - Check service health: `make dev-up` and watch `make logs-go`

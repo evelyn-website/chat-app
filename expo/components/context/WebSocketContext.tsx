@@ -5,6 +5,7 @@ import {
   UpdateGroupParams,
   CreateGroupParams,
   GroupEvent,
+  BlockedUser,
 } from "@/types/types";
 import React, {
   createContext,
@@ -43,12 +44,15 @@ interface WebSocketContextType {
     id: string,
     updateParams: UpdateGroupParams,
   ) => Promise<Group | undefined>;
-  inviteUsersToGroup: (emails: string[], group_id: string) => void;
+  inviteUsersToGroup: (emails: string[], group_id: string) => Promise<{ skipped_users: string[] }>;
   removeUserFromGroup: (email: string, group_id: string) => void;
   leaveGroup: (group_id: string) => void;
   getGroups: () => Promise<Group[]>;
   getUsers: () => Promise<User[]>;
   toggleGroupMuted: (groupId: string) => Promise<{ muted: boolean } | undefined>;
+  blockUser: (userId: string) => Promise<{ removed_from_groups?: string[] }>;
+  unblockUser: (userId: string) => Promise<void>;
+  getBlockedUsers: () => Promise<BlockedUser[]>;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -408,16 +412,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const inviteUsersToGroup = useCallback(
-    async (emails: string[], group_id: string): Promise<any> => {
-      // TODO: define a more specific return type
-      return http
-        .post(`${httpBaseURL}/invite-users-to-group`, {
-          group_id: group_id,
-          emails: emails,
-        })
-        .catch((error) => {
-          console.error("Error inviting users:", error);
-        });
+    async (emails: string[], group_id: string): Promise<{ skipped_users: string[] }> => {
+      const response = await http.post(`${httpBaseURL}/invite-users-to-group`, {
+        group_id: group_id,
+        emails: emails,
+      });
+      return response.data as { skipped_users: string[] };
     },
     [],
   );
@@ -460,6 +460,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     [],
   );
+
+  const blockUser = useCallback(
+    async (userId: string): Promise<{ removed_from_groups?: string[] }> => {
+      const response = await http.post(`${httpBaseURL}/block-user`, {
+        user_id: userId,
+      });
+      return response.data as { removed_from_groups?: string[] };
+    },
+    [],
+  );
+
+  const unblockUser = useCallback(async (userId: string): Promise<void> => {
+    await http.post(`${httpBaseURL}/unblock-user`, { user_id: userId });
+  }, []);
+
+  const getBlockedUsers = useCallback(async (): Promise<BlockedUser[]> => {
+    const response = await http.get(`${httpBaseURL}/blocked-users`);
+    return response.data as BlockedUser[];
+  }, []);
 
   const sendMessage = useCallback(
     (packet: RawMessage) => {
@@ -628,6 +647,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         getGroups,
         getUsers,
         toggleGroupMuted,
+        blockUser,
+        unblockUser,
+        getBlockedUsers,
       }}
     >
       {children}

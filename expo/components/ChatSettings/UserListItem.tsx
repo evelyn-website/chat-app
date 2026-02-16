@@ -26,13 +26,42 @@ const UserListItem = (props: UserListItemProps) => {
 
   const [isKicking, setIsKicking] = useState(false);
 
-  const { removeUserFromGroup } = useWebSocket();
+  const { removeUserFromGroup, blockUser } = useWebSocket();
   const { user: self } = useGlobalStore();
 
   const isTargetUserAdmin = user.admin;
   const isSelf = self?.id === user.id;
 
   const canKickUser = currentUserIsAdmin && !isTargetUserAdmin && !isSelf;
+  const canBlock = !isSelf && !isTargetUserAdmin;
+
+  const handleLongPress = () => {
+    if (!canBlock) return;
+
+    Alert.alert(
+      "Block User",
+      `Block ${user.username}? They will be removed from all shared groups and neither of you will be able to add each other to groups.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(user.id);
+              onKickSuccess(user.id);
+            } catch (error) {
+              console.error("Failed to block user:", error);
+              Alert.alert(
+                "Error",
+                `Failed to block ${user.username}. Please try again.`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleKickUser = () => {
     if (isKicking) return;
@@ -69,7 +98,10 @@ const UserListItem = (props: UserListItemProps) => {
   };
 
   return (
-    <View className={`${index !== 0 ? "border-t border-gray-700" : ""} w-full`}>
+    <Pressable
+      onLongPress={canBlock ? handleLongPress : undefined}
+      className={`${index !== 0 ? "border-t border-gray-700" : ""} w-full`}
+    >
       <View className="flex-row items-center px-4 py-3">
         <View className="flex-1">
           <View className="flex-row items-center">
@@ -103,6 +135,7 @@ const UserListItem = (props: UserListItemProps) => {
 
         {canKickUser && (
           <Pressable
+            testID={`kick-button-${user.username}`}
             disabled={isKicking}
             className={`w-8 h-8 rounded-full items-center justify-center active:bg-gray-700 ${
               isKicking ? "opacity-50" : ""
@@ -119,7 +152,7 @@ const UserListItem = (props: UserListItemProps) => {
           </Pressable>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 };
 

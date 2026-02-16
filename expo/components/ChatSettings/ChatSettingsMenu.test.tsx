@@ -16,7 +16,7 @@ const mockToggleGroupMuted = jest.fn();
 
 jest.mock("../context/WebSocketContext", () => ({
   useWebSocket: () => ({
-    inviteUsersToGroup: jest.fn(),
+    inviteUsersToGroup: jest.fn().mockResolvedValue({ skipped_users: [] }),
     updateGroup: jest.fn(),
     getGroups: jest.fn().mockResolvedValue([]),
     toggleGroupMuted: mockToggleGroupMuted,

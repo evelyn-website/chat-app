@@ -116,7 +116,7 @@ func NewHub(
 		Register:                make(chan *Client),
 		Unregister:              make(chan *Client),
 		Broadcast:               make(chan *RawMessageE2EE, 256),
-		RemoveUserFromGroupChan: make(chan *RemoveClientFromGroupMsg),
+		RemoveUserFromGroupChan: make(chan *RemoveClientFromGroupMsg, 64),
 		AddUserToGroupChan:      make(chan *AddClientToGroupMsg),
 		InitializeGroupChan:     make(chan *InitializeGroupMsg),
 		DeleteHubGroupChan:      make(chan *DeleteHubGroupMsg),

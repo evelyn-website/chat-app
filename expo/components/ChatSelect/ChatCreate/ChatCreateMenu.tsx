@@ -75,7 +75,13 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
 
       if (createdGroup) {
         if (usersToInvite.length > 0) {
-          await inviteUsersToGroup(usersToInvite, createdGroup.id);
+          const result = await inviteUsersToGroup(usersToInvite, createdGroup.id);
+          if (result.skipped_users && result.skipped_users.length > 0) {
+            Alert.alert(
+              "Some Users Not Invited",
+              `The following users could not be invited at this time: ${result.skipped_users.join(", ")}`,
+            );
+          }
         }
 
         await fetchAndRefreshGroups();

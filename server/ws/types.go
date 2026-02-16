@@ -98,6 +98,14 @@ type ClientGroupUser struct {
 	InvitedAt string    `json:"invited_at"`
 }
 
+type BlockUserRequest struct {
+	UserID uuid.UUID `json:"user_id" binding:"required"`
+}
+
+type UnblockUserRequest struct {
+	UserID uuid.UUID `json:"user_id" binding:"required"`
+}
+
 // ClientEvent is a server-to-client lifecycle event sent over WebSocket.
 type ClientEvent struct {
 	Type    string    `json:"type"`     // always "group_event"
