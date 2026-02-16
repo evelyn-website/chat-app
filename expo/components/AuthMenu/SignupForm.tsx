@@ -3,6 +3,8 @@ import { Text, TextInput, View } from "react-native";
 import { useAuthUtils } from "../context/AuthUtilsContext";
 import Button from "../Global/Button/Button";
 
+const MIN_PASSWORD_LENGTH = 8;
+
 export default function SignupForm() {
   const { signup } = useAuthUtils();
 
@@ -11,8 +13,11 @@ export default function SignupForm() {
   const [password, setPassword] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const isUsernameValid = username.trim().length > 0;
+  const isPasswordValid = password.length >= MIN_PASSWORD_LENGTH;
+
   const handleSignup = async () => {
-    if (username && email && password) {
+    if (isUsernameValid && email.trim() && isPasswordValid) {
       setIsLoading(true);
       try {
         await signup(username, email, password);
@@ -62,13 +67,18 @@ export default function SignupForm() {
           <TextInput
             autoCapitalize="none"
             secureTextEntry={true}
-            placeholder="Create a password"
+            placeholder="Create a password (min 8 characters)"
             placeholderTextColor="#6B7280"
             className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full"
             onChangeText={setPassword}
             value={password}
             onSubmitEditing={handleSignup}
           />
+          {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
+            <Text className="text-amber-500 text-xs mt-1">
+              Password must be at least {MIN_PASSWORD_LENGTH} characters
+            </Text>
+          )}
         </View>
       </View>
 
@@ -78,7 +88,7 @@ export default function SignupForm() {
         size="lg"
         variant="primary"
         className="w-full"
-        disabled={isLoading || !username || !email || !password}
+        disabled={isLoading || !isUsernameValid || !email.trim() || !isPasswordValid}
       />
 
       <Text className="text-gray-400 text-xs text-center mt-4">
