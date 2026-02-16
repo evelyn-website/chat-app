@@ -150,8 +150,15 @@ const MessageEntry = ({
             autoCorrect
             spellCheck
             keyboardType="default"
-            className="flex-1 text-base text-gray-200 px-0 py-2 outline-0"
-            style={{ height: 40 }}
+            className="flex-1 text-gray-200 px-0 outline-0"
+            style={{
+              height: 40,
+              fontSize: 16,
+              lineHeight: 20,
+              paddingTop: 0,
+              paddingBottom: 0,
+              paddingVertical: 0,
+            }}
             value={textContent}
             onChangeText={setTextContent}
             placeholder="Type a message..."
