@@ -15,7 +15,7 @@ import (
 const deleteUserGroup = `-- name: DeleteUserGroup :one
 UPDATE user_groups SET deleted_at = NOW()
 WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
-RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at"
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at"
 `
 
 type DeleteUserGroupParams struct {
@@ -28,6 +28,7 @@ type DeleteUserGroupRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -40,6 +41,7 @@ func (q *Queries) DeleteUserGroup(ctx context.Context, arg DeleteUserGroupParams
 		&i.UserID,
 		&i.GroupID,
 		&i.Admin,
+		&i.Muted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -47,7 +49,7 @@ func (q *Queries) DeleteUserGroup(ctx context.Context, arg DeleteUserGroupParams
 }
 
 const getAllUserGroups = `-- name: GetAllUserGroups :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE deleted_at IS NULL
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE deleted_at IS NULL
 `
 
 type GetAllUserGroupsRow struct {
@@ -55,6 +57,7 @@ type GetAllUserGroupsRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -73,6 +76,7 @@ func (q *Queries) GetAllUserGroups(ctx context.Context) ([]GetAllUserGroupsRow, 
 			&i.UserID,
 			&i.GroupID,
 			&i.Admin,
+			&i.Muted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -87,7 +91,7 @@ func (q *Queries) GetAllUserGroups(ctx context.Context) ([]GetAllUserGroupsRow, 
 }
 
 const getAllUserGroupsForGroup = `-- name: GetAllUserGroupsForGroup :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC
 `
 
 type GetAllUserGroupsForGroupRow struct {
@@ -95,6 +99,7 @@ type GetAllUserGroupsForGroupRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -113,6 +118,7 @@ func (q *Queries) GetAllUserGroupsForGroup(ctx context.Context, groupID *uuid.UU
 			&i.UserID,
 			&i.GroupID,
 			&i.Admin,
+			&i.Muted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -127,7 +133,7 @@ func (q *Queries) GetAllUserGroupsForGroup(ctx context.Context, groupID *uuid.UU
 }
 
 const getAllUserGroupsForUser = `-- name: GetAllUserGroupsForUser :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND deleted_at IS NULL
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND deleted_at IS NULL
 `
 
 type GetAllUserGroupsForUserRow struct {
@@ -135,6 +141,7 @@ type GetAllUserGroupsForUserRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -153,6 +160,7 @@ func (q *Queries) GetAllUserGroupsForUser(ctx context.Context, userID *uuid.UUID
 			&i.UserID,
 			&i.GroupID,
 			&i.Admin,
+			&i.Muted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -166,8 +174,32 @@ func (q *Queries) GetAllUserGroupsForUser(ctx context.Context, userID *uuid.UUID
 	return items, nil
 }
 
+const getMutedUserIDsForGroup = `-- name: GetMutedUserIDsForGroup :many
+SELECT user_id FROM user_groups WHERE group_id = $1 AND muted = true AND deleted_at IS NULL
+`
+
+func (q *Queries) GetMutedUserIDsForGroup(ctx context.Context, groupID *uuid.UUID) ([]*uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getMutedUserIDsForGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*uuid.UUID
+	for rows.Next() {
+		var user_id *uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserGroupByGroupIDAndUserID = `-- name: GetUserGroupByGroupIDAndUserID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
 `
 
 type GetUserGroupByGroupIDAndUserIDParams struct {
@@ -180,6 +212,7 @@ type GetUserGroupByGroupIDAndUserIDRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -192,6 +225,7 @@ func (q *Queries) GetUserGroupByGroupIDAndUserID(ctx context.Context, arg GetUse
 		&i.UserID,
 		&i.GroupID,
 		&i.Admin,
+		&i.Muted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -199,7 +233,7 @@ func (q *Queries) GetUserGroupByGroupIDAndUserID(ctx context.Context, arg GetUse
 }
 
 const getUserGroupByID = `-- name: GetUserGroupByID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE id = $1 AND deleted_at IS NULL
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetUserGroupByIDRow struct {
@@ -207,6 +241,7 @@ type GetUserGroupByIDRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -219,6 +254,7 @@ func (q *Queries) GetUserGroupByID(ctx context.Context, id uuid.UUID) (GetUserGr
 		&i.UserID,
 		&i.GroupID,
 		&i.Admin,
+		&i.Muted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -230,7 +266,7 @@ INSERT INTO user_groups
     ("user_id", "group_id", "admin")
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, group_id) WHERE deleted_at IS NULL DO NOTHING
-RETURNING id, user_id, group_id, created_at, updated_at, admin, deleted_at
+RETURNING id, user_id, group_id, created_at, updated_at, admin, deleted_at, muted
 `
 
 type InsertUserGroupParams struct {
@@ -250,6 +286,44 @@ func (q *Queries) InsertUserGroup(ctx context.Context, arg InsertUserGroupParams
 		&i.UpdatedAt,
 		&i.Admin,
 		&i.DeletedAt,
+		&i.Muted,
+	)
+	return i, err
+}
+
+const toggleGroupMuted = `-- name: ToggleGroupMuted :one
+UPDATE user_groups
+SET muted = NOT muted
+WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at"
+`
+
+type ToggleGroupMutedParams struct {
+	UserID  *uuid.UUID `json:"user_id"`
+	GroupID *uuid.UUID `json:"group_id"`
+}
+
+type ToggleGroupMutedRow struct {
+	ID        uuid.UUID        `json:"id"`
+	UserID    *uuid.UUID       `json:"user_id"`
+	GroupID   *uuid.UUID       `json:"group_id"`
+	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+	UpdatedAt pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) ToggleGroupMuted(ctx context.Context, arg ToggleGroupMutedParams) (ToggleGroupMutedRow, error) {
+	row := q.db.QueryRow(ctx, toggleGroupMuted, arg.UserID, arg.GroupID)
+	var i ToggleGroupMutedRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.GroupID,
+		&i.Admin,
+		&i.Muted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -259,7 +333,7 @@ UPDATE user_groups
 SET
     "admin" = $3
 WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
-RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at"
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at"
 `
 
 type UpdateUserGroupParams struct {
@@ -273,6 +347,7 @@ type UpdateUserGroupRow struct {
 	UserID    *uuid.UUID       `json:"user_id"`
 	GroupID   *uuid.UUID       `json:"group_id"`
 	Admin     bool             `json:"admin"`
+	Muted     bool             `json:"muted"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -285,6 +360,7 @@ func (q *Queries) UpdateUserGroup(ctx context.Context, arg UpdateUserGroupParams
 		&i.UserID,
 		&i.GroupID,
 		&i.Admin,
+		&i.Muted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

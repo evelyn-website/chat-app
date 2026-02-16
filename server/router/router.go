@@ -37,6 +37,7 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	apiRoutes.GET("/users/device-keys", api.GetRelevantDeviceKeys)
 
 	apiRoutes.POST("/groups/reserve/:groupID", api.ReserveGroup)
+	apiRoutes.PUT("/groups/:groupID/mute", api.ToggleGroupMuted)
 
 	// Notification routes
 	apiRoutes.POST("/notifications/register-token", notificationHandler.RegisterPushToken)

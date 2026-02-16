@@ -1,0 +1,1 @@
+ALTER TABLE user_groups ADD COLUMN muted BOOLEAN NOT NULL DEFAULT false;

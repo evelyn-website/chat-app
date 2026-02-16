@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func (api *API) ToggleGroupMuted(c *gin.Context) {
+	user, err := util.GetUser(c, api.db)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized,
+			gin.H{"error": "User not found or unauthorized"})
+		return
+	}
+
+	groupID, err := uuid.Parse(c.Param("groupID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest,
+			gin.H{"error": "Invalid group ID"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	result, err := api.db.ToggleGroupMuted(ctx, db.ToggleGroupMutedParams{
+		UserID:  &user.ID,
+		GroupID: &groupID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound,
+				gin.H{"error": "User is not a member of this group"})
+			return
+		}
+		log.Printf("Error toggling mute for user %s in group %s: %v", user.ID, groupID, err)
+		c.JSON(http.StatusInternalServerError,
+			gin.H{"error": "Failed to toggle mute"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"muted": result.Muted})
+}
+
 func (api *API) ReserveGroup(c *gin.Context) {
   user, err := util.GetUser(c, api.db)
   if err != nil {

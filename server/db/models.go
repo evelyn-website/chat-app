@@ -127,4 +127,5 @@ type UserGroup struct {
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 	Admin     bool             `json:"admin"`
 	DeletedAt pgtype.Timestamp `json:"deleted_at"`
+	Muted     bool             `json:"muted"`
 }

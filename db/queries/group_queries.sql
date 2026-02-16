@@ -5,7 +5,7 @@ SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_
 SELECT "id", "name", "description", "location", "image_url", "blurhash", "start_time", "end_time", "created_at", "updated_at" FROM groups WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetGroupsForUser :many
-SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, groups.updated_at,
+SELECT groups.id, groups.name, groups."description", groups."location", groups."image_url", groups."blurhash", groups.start_time, groups.end_time, groups.created_at, ug.admin, ug.muted, groups.updated_at,
 json_agg(jsonb_build_object('id', u2.id, 'username', u2.username, 'email', u2.email, 'admin', ug2.admin, 'invited_at', ug2.created_at)) AS group_users
 FROM groups
 JOIN user_groups ug ON ug.group_id = groups.id

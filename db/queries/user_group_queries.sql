@@ -1,17 +1,17 @@
 -- name: GetAllUserGroups :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE deleted_at IS NULL;
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE deleted_at IS NULL;
 
 -- name: GetAllUserGroupsForUser :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND deleted_at IS NULL;
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND deleted_at IS NULL;
 
 -- name: GetAllUserGroupsForGroup :many
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC;
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE group_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC;
 
 -- name: GetUserGroupByID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE id = $1 AND deleted_at IS NULL;
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetUserGroupByGroupIDAndUserID :one
-SELECT "id", "user_id", "group_id", "admin", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL;
+SELECT "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at" FROM user_groups WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL;
 
 -- name: InsertUserGroup :one
 INSERT INTO user_groups
@@ -25,9 +25,18 @@ UPDATE user_groups
 SET
     "admin" = $3
 WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
-RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at";
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at";
 
 -- name: DeleteUserGroup :one
 UPDATE user_groups SET deleted_at = NOW()
 WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
-RETURNING "id", "user_id", "group_id", "admin", "created_at", "updated_at";
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at";
+
+-- name: ToggleGroupMuted :one
+UPDATE user_groups
+SET muted = NOT muted
+WHERE user_id = $1 AND group_id = $2 AND deleted_at IS NULL
+RETURNING "id", "user_id", "group_id", "admin", "muted", "created_at", "updated_at";
+
+-- name: GetMutedUserIDsForGroup :many
+SELECT user_id FROM user_groups WHERE group_id = $1 AND muted = true AND deleted_at IS NULL;
