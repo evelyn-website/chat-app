@@ -82,9 +82,8 @@ const GroupAvatarEditable = memo(function GroupAvatarEditable({
           }
           disabled={!isEditing || !isAdmin || !!imageURL || isUploading}
           className={`
-            w-36 h-36 rounded-full bg-gray-700 border-2 items-center justify-center overflow-hidden
-            shadow-lg
-            ${isEditing && isAdmin ? "border-blue-500" : "border-gray-600"}
+            w-36 h-36 rounded-full bg-white/5 border-2 items-center justify-center overflow-hidden
+            ${isEditing && isAdmin ? "border-blue-400" : "border-white/20"}
           `}
         >
           {content}
@@ -102,7 +101,7 @@ const GroupAvatarEditable = memo(function GroupAvatarEditable({
             className="absolute bottom-1 right-1 z-10"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View className="w-9 h-9 rounded-full bg-blue-500 border-2 border-gray-800 items-center justify-center shadow-md">
+            <View className="w-9 h-9 rounded-full bg-blue-500 border-2 border-white/20 items-center justify-center">
               <Ionicons name="pencil" size={18} color="white" />
             </View>
           </Pressable>
@@ -114,7 +113,7 @@ const GroupAvatarEditable = memo(function GroupAvatarEditable({
             className="absolute top-1 right-1 z-10"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View className="w-7 h-7 rounded-full bg-red-500 border-2 border-gray-800 items-center justify-center shadow-md">
+            <View className="w-7 h-7 rounded-full bg-red-500 border-2 border-white/20 items-center justify-center">
               <Ionicons name="close" size={16} color="white" />
             </View>
           </Pressable>
