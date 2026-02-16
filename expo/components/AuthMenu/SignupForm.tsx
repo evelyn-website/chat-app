@@ -4,6 +4,10 @@ import { useAuthUtils } from "../context/AuthUtilsContext";
 import Button from "../Global/Button/Button";
 
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 72;
+const MAX_USERNAME_LENGTH = 50;
+const MAX_EMAIL_LENGTH = 255;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignupForm() {
   const { signup } = useAuthUtils();
@@ -13,14 +17,15 @@ export default function SignupForm() {
   const [password, setPassword] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const isUsernameValid = username.trim().length > 0;
-  const isPasswordValid = password.length >= MIN_PASSWORD_LENGTH;
+  const isUsernameValid = username.trim().length > 0 && username.trim().length <= MAX_USERNAME_LENGTH;
+  const isEmailValid = email.trim().length > 0 && EMAIL_REGEX.test(email.trim()) && email.trim().length <= MAX_EMAIL_LENGTH;
+  const isPasswordValid = password.length >= MIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
 
   const handleSignup = async () => {
-    if (isUsernameValid && email.trim() && isPasswordValid) {
+    if (isUsernameValid && isEmailValid && isPasswordValid) {
       setIsLoading(true);
       try {
-        await signup(username, email, password);
+        await signup(username.trim(), email.trim(), password);
       } catch (error) {
         console.error(error);
       } finally {
@@ -44,6 +49,11 @@ export default function SignupForm() {
             onChangeText={setEmail}
             value={email}
           />
+          {email.length > 0 && !isEmailValid && (
+            <Text className="text-amber-500 text-xs mt-1">
+              Please enter a valid email address
+            </Text>
+          )}
         </View>
 
         <View>
@@ -57,7 +67,13 @@ export default function SignupForm() {
             className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 w-full"
             onChangeText={setUsername}
             value={username}
+            maxLength={MAX_USERNAME_LENGTH}
           />
+          {username.length > 0 && !isUsernameValid && (
+            <Text className="text-amber-500 text-xs mt-1">
+              Username cannot be blank or exceed {MAX_USERNAME_LENGTH} characters
+            </Text>
+          )}
         </View>
 
         <View>
@@ -73,10 +89,11 @@ export default function SignupForm() {
             onChangeText={setPassword}
             value={password}
             onSubmitEditing={handleSignup}
+            maxLength={MAX_PASSWORD_LENGTH}
           />
-          {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
+          {password.length > 0 && !isPasswordValid && (
             <Text className="text-amber-500 text-xs mt-1">
-              Password must be at least {MIN_PASSWORD_LENGTH} characters
+              Password must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters
             </Text>
           )}
         </View>
@@ -88,7 +105,7 @@ export default function SignupForm() {
         size="lg"
         variant="primary"
         className="w-full"
-        disabled={isLoading || !isUsernameValid || !email.trim() || !isPasswordValid}
+        disabled={isLoading || !isUsernameValid || !isEmailValid || !isPasswordValid}
       />
 
       <Text className="text-gray-400 text-xs text-center mt-4">
