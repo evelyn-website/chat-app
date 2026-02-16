@@ -43,6 +43,13 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	apiRoutes.POST("/notifications/register-token", notificationHandler.RegisterPushToken)
 	apiRoutes.DELETE("/notifications/token", notificationHandler.ClearPushToken)
 
+	// Invite routes (authenticated)
+	apiRoutes.POST("/invites", wsHandler.CreateInvite)
+	apiRoutes.POST("/invites/:code/accept", wsHandler.AcceptInvite)
+
+	// Invite preview (unauthenticated)
+	r.GET("/public/invites/:code", wsHandler.ValidateInvite)
+
 	// auth routes group
 	authRoutes := r.Group("/auth/")
 	authRoutes.POST("/signup", authHandler.Signup)

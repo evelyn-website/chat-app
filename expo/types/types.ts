@@ -179,3 +179,27 @@ export type GroupEvent = {
   event: "user_invited" | "user_removed" | "group_updated" | "group_deleted";
   group_id: string;
 };
+
+export type InvitePreview = {
+  group_id: string;
+  group_name: string;
+  description?: string | null;
+  image_url?: string | null;
+  blurhash?: string | null;
+  member_count: number;
+  start_time?: string | null;
+  end_time?: string | null;
+  expires_at: string;
+};
+
+export type CreateInviteResponse = {
+  code: string;
+  expires_at: string;
+  max_uses: number;
+  invite_url: string;
+};
+
+export type AcceptInviteResponse = {
+  group_id: string;
+  message: string;
+};

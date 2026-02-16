@@ -1,8 +1,9 @@
 import { User } from "@/types/types";
 import http from "@/util/custom-axios";
 import { save, clear } from "@/util/custom-store";
-import axios, { CanceledError } from "axios";
+import axios, { CanceledError, isAxiosError } from "axios";
 import React, { createContext, useContext, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGlobalStore } from "./GlobalStoreContext";
 import { useWebSocket } from "./WebSocketContext";
 import { router } from "expo-router";
@@ -24,19 +25,47 @@ interface WhoAmIResult {
 }
 
 const AuthUtilsContext = createContext<AuthUtilsContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
-  const { establishConnection, disconnect, connected } = useWebSocket();
+  const { establishConnection, disconnect, connected, acceptInvite } =
+    useWebSocket();
   const { loadHistoricalMessages } = useMessageStore();
   const {
     user,
     setUser,
     setDeviceId,
     deviceId: globalDeviceId,
+    refreshGroups,
   } = useGlobalStore();
   const { children } = props;
+
+  const handlePendingInvite = useCallback(async () => {
+    try {
+      const pendingCode = await AsyncStorage.getItem("pendingInviteCode");
+      if (pendingCode) {
+        try {
+          const result = await acceptInvite(pendingCode);
+          await AsyncStorage.removeItem("pendingInviteCode");
+          if (result.group_id) {
+            refreshGroups();
+          }
+        } catch (error) {
+          if (isAxiosError(error)) {
+            const status = error.response?.status;
+            // Terminal invite failures should not retry on every login.
+            if (status === 403 || status === 404 || status === 410) {
+              await AsyncStorage.removeItem("pendingInviteCode");
+            }
+          }
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error("Error handling pending invite:", error);
+    }
+  }, [acceptInvite, refreshGroups]);
 
   const isTransientConnectionError = (error: unknown): boolean => {
     const message = (error as Error)?.message || String(error || "");
@@ -60,7 +89,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
 
         if (!user || forceRefresh) {
           const response = await http.get<User>(
-            `${process.env.EXPO_PUBLIC_HOST}/api/users/whoami`
+            `${process.env.EXPO_PUBLIC_HOST}/api/users/whoami`,
           );
           const loggedInUser = response.data;
           setUser(loggedInUser);
@@ -95,7 +124,14 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         return { user, deviceId: globalDeviceId };
       }
     },
-    [globalDeviceId, setDeviceId, user, setUser, connected, establishConnection]
+    [
+      globalDeviceId,
+      setDeviceId,
+      user,
+      setUser,
+      connected,
+      establishConnection,
+    ],
   );
 
   const login = useCallback(
@@ -112,7 +148,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
-          }
+          },
         );
         const { data } = response;
         await save("jwt", data.token);
@@ -121,19 +157,20 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         const { deviceId: currentDeviceId } = await whoami(true);
         router.replace({ pathname: "/(app)" });
         await loadHistoricalMessages(currentDeviceId);
+        await handlePendingInvite();
       } catch (error) {
         console.error("Error signing in:", error);
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite],
   );
 
   const signup = useCallback(
     async (
       username: string,
       email: string,
-      password: string
+      password: string,
     ): Promise<void> => {
       try {
         const { deviceId, publicKey } =
@@ -148,7 +185,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
-          }
+          },
         );
         const { data } = response;
         await save("jwt", data.token);
@@ -157,12 +194,13 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         await whoami(true);
         router.replace({ pathname: "/(app)" });
         await loadHistoricalMessages();
+        await handlePendingInvite();
       } catch (error) {
         console.error("Error signing up:", error);
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite],
   );
 
   const logout = useCallback(async () => {

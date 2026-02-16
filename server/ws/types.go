@@ -106,9 +106,38 @@ type UnblockUserRequest struct {
 	UserID uuid.UUID `json:"user_id" binding:"required"`
 }
 
+type CreateInviteRequest struct {
+	GroupID uuid.UUID `json:"group_id" binding:"required"`
+	MaxUses int       `json:"max_uses" binding:"min=0"`
+}
+
+type CreateInviteResponse struct {
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expires_at"`
+	MaxUses   int       `json:"max_uses"`
+	InviteURL string    `json:"invite_url"`
+}
+
+type InvitePreviewResponse struct {
+	GroupID     uuid.UUID  `json:"group_id"`
+	GroupName   string     `json:"group_name"`
+	Description *string    `json:"description,omitempty"`
+	ImageUrl    *string    `json:"image_url,omitempty"`
+	Blurhash    *string    `json:"blurhash,omitempty"`
+	MemberCount int32      `json:"member_count"`
+	StartTime   *time.Time `json:"start_time,omitempty"`
+	EndTime     *time.Time `json:"end_time,omitempty"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+}
+
+type AcceptInviteResponse struct {
+	GroupID uuid.UUID `json:"group_id"`
+	Message string    `json:"message"`
+}
+
 // ClientEvent is a server-to-client lifecycle event sent over WebSocket.
 type ClientEvent struct {
-	Type    string    `json:"type"`     // always "group_event"
-	Event   string    `json:"event"`    // "user_invited", "user_removed", "group_updated", "group_deleted"
+	Type    string    `json:"type"`  // always "group_event"
+	Event   string    `json:"event"` // "user_invited", "user_removed", "group_updated", "group_deleted"
 	GroupID uuid.UUID `json:"group_id"`
 }

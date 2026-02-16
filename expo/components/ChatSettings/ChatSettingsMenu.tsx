@@ -7,6 +7,8 @@ import {
   Platform,
   TouchableOpacity,
   Switch,
+  Share,
+  ActivityIndicator,
 } from "react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import type { Group, UpdateGroupParams, DateOptions } from "@/types/types";
@@ -33,8 +35,13 @@ const ChatSettingsMenu = (props: {
   const { store, refreshGroups } = useGlobalStore();
   const currentUserIsAdmin = initialGroup.admin;
 
-  const { inviteUsersToGroup, updateGroup, getGroups, toggleGroupMuted } =
-    useWebSocket();
+  const {
+    inviteUsersToGroup,
+    updateGroup,
+    getGroups,
+    toggleGroupMuted,
+    createInviteLink,
+  } = useWebSocket();
 
   const [currentGroup, setCurrentGroup] = useState<Group>(initialGroup);
 
@@ -75,6 +82,7 @@ const ChatSettingsMenu = (props: {
   const [isTogglingMute, setIsTogglingMute] = useState(false);
   const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
@@ -216,6 +224,22 @@ const ChatSettingsMenu = (props: {
       setIsLoadingInvite(false);
     }
   };
+
+  const handleShareInviteLink = useCallback(async () => {
+    if (isGeneratingLink) return;
+    setIsGeneratingLink(true);
+    try {
+      const result = await createInviteLink(currentGroup.id);
+      await Share.share({
+        message: `Join ${currentGroup.name} on the app! ${result.invite_url}`,
+      });
+    } catch (error) {
+      console.error("Error sharing invite link:", error);
+      Alert.alert("Error", "Could not generate invite link. Please try again.");
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  }, [currentGroup.id, currentGroup.name, createInviteLink, isGeneratingLink]);
 
   const handlePickImage = useCallback(async () => {
     if (isUploading) {
@@ -506,6 +530,30 @@ const ChatSettingsMenu = (props: {
           />
         </View>
       </View>
+
+      {/* Share Invite Link Card */}
+      {currentUserIsAdmin && (
+        <View className="w-full bg-gray-900 rounded-xl shadow-md p-4 mb-4">
+          <Text className="text-lg font-semibold text-blue-400 mb-3">
+            Share Invite Link
+          </Text>
+          <Button
+            variant="primary"
+            size="lg"
+            className="w-full"
+            text={isGeneratingLink ? "Generating..." : "Share Invite Link"}
+            onPress={handleShareInviteLink}
+            disabled={isGeneratingLink}
+            leftIcon={
+              isGeneratingLink ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Ionicons name="link-outline" size={18} color="white" />
+              )
+            }
+          />
+        </View>
+      )}
 
       {/* User Invite Card */}
       {currentUserIsAdmin && (
