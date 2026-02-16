@@ -68,7 +68,7 @@ func (j *CleanupExpiredGroupsJob) Name() string {
 }
 
 func (j *CleanupExpiredGroupsJob) Schedule() string {
-	return "0 */6 * * *" // Every 6 hours
+	return "0 * * * *" // Every hour
 }
 
 func (j *CleanupExpiredGroupsJob) LockTimeout() time.Duration {
