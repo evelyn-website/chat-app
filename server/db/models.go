@@ -95,6 +95,17 @@ type GroupReservation struct {
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
+type Invite struct {
+	ID        uuid.UUID          `json:"id"`
+	Code      string             `json:"code"`
+	GroupID   uuid.UUID          `json:"group_id"`
+	CreatedBy uuid.UUID          `json:"created_by"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	MaxUses   int32              `json:"max_uses"`
+	UseCount  int32              `json:"use_count"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Message struct {
 	ID        uuid.UUID        `json:"id"`
 	UserID    *uuid.UUID       `json:"user_id"`

@@ -3,6 +3,7 @@ import http from "@/util/custom-axios";
 import { save, clear } from "@/util/custom-store";
 import axios, { CanceledError } from "axios";
 import React, { createContext, useContext, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGlobalStore } from "./GlobalStoreContext";
 import { useWebSocket } from "./WebSocketContext";
 import { router } from "expo-router";
@@ -28,15 +29,32 @@ const AuthUtilsContext = createContext<AuthUtilsContextType | undefined>(
 );
 
 export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
-  const { establishConnection, disconnect, connected } = useWebSocket();
+  const { establishConnection, disconnect, connected, acceptInvite } =
+    useWebSocket();
   const { loadHistoricalMessages } = useMessageStore();
   const {
     user,
     setUser,
     setDeviceId,
     deviceId: globalDeviceId,
+    refreshGroups,
   } = useGlobalStore();
   const { children } = props;
+
+  const handlePendingInvite = useCallback(async () => {
+    try {
+      const pendingCode = await AsyncStorage.getItem("pendingInviteCode");
+      if (pendingCode) {
+        await AsyncStorage.removeItem("pendingInviteCode");
+        const result = await acceptInvite(pendingCode);
+        if (result.group_id) {
+          refreshGroups();
+        }
+      }
+    } catch (error) {
+      console.error("Error handling pending invite:", error);
+    }
+  }, [acceptInvite, refreshGroups]);
 
   const isTransientConnectionError = (error: unknown): boolean => {
     const message = (error as Error)?.message || String(error || "");
@@ -121,12 +139,13 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         const { deviceId: currentDeviceId } = await whoami(true);
         router.replace({ pathname: "/(app)" });
         await loadHistoricalMessages(currentDeviceId);
+        await handlePendingInvite();
       } catch (error) {
         console.error("Error signing in:", error);
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite]
   );
 
   const signup = useCallback(
@@ -157,12 +176,13 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         await whoami(true);
         router.replace({ pathname: "/(app)" });
         await loadHistoricalMessages();
+        await handlePendingInvite();
       } catch (error) {
         console.error("Error signing up:", error);
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite]
   );
 
   const logout = useCallback(async () => {

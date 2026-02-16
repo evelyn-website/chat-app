@@ -341,6 +341,24 @@ func (h *Hub) handleUserAddedToGroupEvent(userID uuid.UUID, groupID uuid.UUID, o
 			}
 		}
 	}
+
+	// Notify existing group members on this instance so they see the new member
+	if originServerID != h.serverID {
+		if group, exists := h.Groups[groupID]; exists {
+			group.mutex.RLock()
+			for _, c := range group.Clients {
+				if c.User.ID == userID {
+					continue
+				}
+				select {
+				case c.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: groupID}:
+				default:
+					log.Printf("Hub %s: Events channel full for client %s on user_invited (group broadcast) for group %s", h.serverID, c.User.ID.String(), groupID.String())
+				}
+			}
+			group.mutex.RUnlock()
+		}
+	}
 }
 
 // handleUserRemovedFromGroupEvent is called from Redis PubSub. See handleUserAddedToGroupEvent
@@ -669,7 +687,7 @@ func (h *Hub) Run() {
 				} else {
 					h.redisClient.Publish(h.ctx, pubSubGroupEventsChannel, serializedEvt)
 				}
-				// Forward event to locally connected client
+				// Forward event to locally connected joining client
 				h.mutex.RLock()
 				if client, ok := h.Clients[addMsg.UserID]; ok {
 					select {
@@ -677,6 +695,21 @@ func (h *Hub) Run() {
 					default:
 						log.Printf("Hub %s: Events channel full for client %s on user_invited (direct) for group %s", h.serverID, addMsg.UserID.String(), addMsg.GroupID.String())
 					}
+				}
+				// Notify existing group members so they see the new member
+				if group, exists := h.Groups[addMsg.GroupID]; exists {
+					group.mutex.RLock()
+					for _, client := range group.Clients {
+						if client.User.ID == addMsg.UserID {
+							continue
+						}
+						select {
+						case client.Events <- &ClientEvent{Type: "group_event", Event: "user_invited", GroupID: addMsg.GroupID}:
+						default:
+							log.Printf("Hub %s: Events channel full for client %s on user_invited (group broadcast) for group %s", h.serverID, client.User.ID.String(), addMsg.GroupID.String())
+						}
+					}
+					group.mutex.RUnlock()
 				}
 				h.mutex.RUnlock()
 			}

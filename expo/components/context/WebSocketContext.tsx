@@ -6,6 +6,9 @@ import {
   CreateGroupParams,
   GroupEvent,
   BlockedUser,
+  InvitePreview,
+  CreateInviteResponse,
+  AcceptInviteResponse,
 } from "@/types/types";
 import React, {
   createContext,
@@ -17,6 +20,7 @@ import React, {
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import axios from "axios";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
 
@@ -53,6 +57,9 @@ interface WebSocketContextType {
   blockUser: (userId: string) => Promise<{ removed_from_groups?: string[] }>;
   unblockUser: (userId: string) => Promise<void>;
   getBlockedUsers: () => Promise<BlockedUser[]>;
+  createInviteLink: (groupId: string, maxUses?: number) => Promise<CreateInviteResponse>;
+  validateInvite: (code: string) => Promise<InvitePreview>;
+  acceptInvite: (code: string) => Promise<AcceptInviteResponse>;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -480,6 +487,40 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     return response.data as BlockedUser[];
   }, []);
 
+  const createInviteLink = useCallback(
+    async (groupId: string, maxUses?: number): Promise<CreateInviteResponse> => {
+      const response = await http.post(
+        `${process.env.EXPO_PUBLIC_HOST}/api/invites`,
+        {
+          group_id: groupId,
+          max_uses: maxUses ?? 0,
+        },
+      );
+      return response.data as CreateInviteResponse;
+    },
+    [],
+  );
+
+  const validateInvite = useCallback(
+    async (code: string): Promise<InvitePreview> => {
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_HOST}/api/invites/${code}`,
+      );
+      return response.data as InvitePreview;
+    },
+    [],
+  );
+
+  const acceptInvite = useCallback(
+    async (code: string): Promise<AcceptInviteResponse> => {
+      const response = await http.post(
+        `${process.env.EXPO_PUBLIC_HOST}/api/invites/${code}/accept`,
+      );
+      return response.data as AcceptInviteResponse;
+    },
+    [],
+  );
+
   const sendMessage = useCallback(
     (packet: RawMessage) => {
       const socket = socketRef.current;
@@ -650,6 +691,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         blockUser,
         unblockUser,
         getBlockedUsers,
+        createInviteLink,
+        validateInvite,
+        acceptInvite,
       }}
     >
       {children}

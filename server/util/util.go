@@ -3,6 +3,7 @@ package util
 import (
 	"chat-app-server/db"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"time"
@@ -61,4 +62,16 @@ func NullablePgTimestamp(s *time.Time) pgtype.Timestamp {
 		return pgtype.Timestamp{Valid: false}
 	}
 	return pgtype.Timestamp{Time: *s, Valid: true}
+}
+
+func GenerateInviteCode(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b), nil
 }
