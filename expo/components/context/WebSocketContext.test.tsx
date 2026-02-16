@@ -1,11 +1,11 @@
-import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
-import NetInfo from '@react-native-community/netinfo';
-import { WebSocketProvider, useWebSocket } from './WebSocketContext';
-import type { BlockedUser } from '@/types/types';
+import React from "react";
+import { renderHook, act } from "@testing-library/react-native";
+import NetInfo from "@react-native-community/netinfo";
+import { WebSocketProvider, useWebSocket } from "./WebSocketContext";
+import http from "@/util/custom-axios";
 
 // Mock dependencies
-jest.mock('@/util/custom-axios', () => ({
+jest.mock("@/util/custom-axios", () => ({
   __esModule: true,
   default: {
     get: jest.fn().mockResolvedValue({ data: [] }),
@@ -18,15 +18,16 @@ jest.mock('@/util/custom-axios', () => ({
     },
   },
 }));
-jest.mock('@/util/custom-store', () => ({
-  get: jest.fn().mockResolvedValue('test-jwt-token'),
+jest.mock("@/util/custom-store", () => ({
+  get: jest.fn().mockResolvedValue("test-jwt-token"),
   set: jest.fn(),
   remove: jest.fn(),
 }));
 
-let mockNetInfoCallback: ((state: { isConnected: boolean }) => void) | null = null;
+let mockNetInfoCallback: ((state: { isConnected: boolean }) => void) | null =
+  null;
 const mockNetInfoUnsubscribe = jest.fn();
-jest.mock('@react-native-community/netinfo', () => ({
+jest.mock("@react-native-community/netinfo", () => ({
   addEventListener: jest.fn((cb) => {
     mockNetInfoCallback = cb;
     return mockNetInfoUnsubscribe;
@@ -52,7 +53,16 @@ class MockWebSocket {
 }
 global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
-describe('WebSocketContext', () => {
+type HttpMock = {
+  get: jest.Mock;
+  post: jest.Mock;
+  put: jest.Mock;
+  delete: jest.Mock;
+};
+
+const mockHttp = http as unknown as HttpMock;
+
+describe("WebSocketContext", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockNetInfoCallback = null;
@@ -68,66 +78,66 @@ describe('WebSocketContext', () => {
     <WebSocketProvider>{children}</WebSocketProvider>
   );
 
-  describe('Provider', () => {
-    it('should provide context', () => {
+  describe("Provider", () => {
+    it("should provide context", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       expect(result.current).toBeDefined();
-      expect(result.current).toHaveProperty('sendMessage');
-      expect(result.current).toHaveProperty('connected');
-      expect(result.current).toHaveProperty('onMessage');
-      expect(result.current).toHaveProperty('onGroupEvent');
-      expect(result.current).toHaveProperty('removeGroupEventHandler');
-      expect(result.current).toHaveProperty('establishConnection');
-      expect(result.current).toHaveProperty('disconnect');
+      expect(result.current).toHaveProperty("sendMessage");
+      expect(result.current).toHaveProperty("connected");
+      expect(result.current).toHaveProperty("onMessage");
+      expect(result.current).toHaveProperty("onGroupEvent");
+      expect(result.current).toHaveProperty("removeGroupEventHandler");
+      expect(result.current).toHaveProperty("establishConnection");
+      expect(result.current).toHaveProperty("disconnect");
     });
 
-    it('should initialize with disconnected state', () => {
+    it("should initialize with disconnected state", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       expect(result.current.connected).toBe(false);
     });
 
-    it('should provide group operation functions', () => {
+    it("should provide group operation functions", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.createGroup).toBe('function');
-      expect(typeof result.current.updateGroup).toBe('function');
-      expect(typeof result.current.inviteUsersToGroup).toBe('function');
-      expect(typeof result.current.removeUserFromGroup).toBe('function');
-      expect(typeof result.current.leaveGroup).toBe('function');
+      expect(typeof result.current.createGroup).toBe("function");
+      expect(typeof result.current.updateGroup).toBe("function");
+      expect(typeof result.current.inviteUsersToGroup).toBe("function");
+      expect(typeof result.current.removeUserFromGroup).toBe("function");
+      expect(typeof result.current.leaveGroup).toBe("function");
     });
 
-    it('should provide data fetching functions', () => {
+    it("should provide data fetching functions", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.getGroups).toBe('function');
-      expect(typeof result.current.getUsers).toBe('function');
+      expect(typeof result.current.getGroups).toBe("function");
+      expect(typeof result.current.getUsers).toBe("function");
     });
 
-    it('should provide toggleGroupMuted function', () => {
+    it("should provide toggleGroupMuted function", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.toggleGroupMuted).toBe('function');
+      expect(typeof result.current.toggleGroupMuted).toBe("function");
     });
 
-    it('should throw error when used outside provider', () => {
-      const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    it("should throw error when used outside provider", () => {
+      const spy = jest.spyOn(console, "error").mockImplementation(() => {});
 
       expect(() => {
         renderHook(() => useWebSocket());
-      }).toThrow('useWebSocket must be used within a WebSocketProvider');
+      }).toThrow("useWebSocket must be used within a WebSocketProvider");
 
       spy.mockRestore();
     });
   });
 
-  describe('Watchdog timer', () => {
-    it('should attempt reconnection when disconnected and not reconnecting', async () => {
+  describe("Watchdog timer", () => {
+    it("should attempt reconnection when disconnected and not reconnecting", async () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       // Initially disconnected — watchdog should fire after 30s
-      const establishSpy = jest.spyOn(result.current, 'establishConnection');
+      const establishSpy = jest.spyOn(result.current, "establishConnection");
 
       await act(() => {
         jest.advanceTimersByTime(30_000);
@@ -139,8 +149,8 @@ describe('WebSocketContext', () => {
       establishSpy.mockRestore();
     });
 
-    it('should clean up interval on unmount', () => {
-      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+    it("should clean up interval on unmount", () => {
+      const clearIntervalSpy = jest.spyOn(global, "clearInterval");
       const { unmount } = renderHook(() => useWebSocket(), { wrapper });
 
       unmount();
@@ -150,16 +160,18 @@ describe('WebSocketContext', () => {
     });
   });
 
-  describe('NetInfo listener', () => {
-    it('should subscribe to NetInfo on mount', () => {
+  describe("NetInfo listener", () => {
+    it("should subscribe to NetInfo on mount", () => {
       jest.mocked(NetInfo.addEventListener).mockClear();
 
       renderHook(() => useWebSocket(), { wrapper });
 
-      expect(NetInfo.addEventListener).toHaveBeenCalledWith(expect.any(Function));
+      expect(NetInfo.addEventListener).toHaveBeenCalledWith(
+        expect.any(Function),
+      );
     });
 
-    it('should unsubscribe from NetInfo on unmount', () => {
+    it("should unsubscribe from NetInfo on unmount", () => {
       mockNetInfoUnsubscribe.mockClear();
       const { unmount } = renderHook(() => useWebSocket(), { wrapper });
 
@@ -168,7 +180,7 @@ describe('WebSocketContext', () => {
       expect(mockNetInfoUnsubscribe).toHaveBeenCalled();
     });
 
-    it('should debounce reconnection on network restoration', async () => {
+    it("should debounce reconnection on network restoration", async () => {
       renderHook(() => useWebSocket(), { wrapper });
 
       // Simulate network loss then restoration
@@ -190,7 +202,7 @@ describe('WebSocketContext', () => {
       });
     });
 
-    it('should not attempt reconnection on repeated connected events', async () => {
+    it("should not attempt reconnection on repeated connected events", async () => {
       renderHook(() => useWebSocket(), { wrapper });
 
       // Fire multiple connected events without a disconnection first
@@ -210,20 +222,20 @@ describe('WebSocketContext', () => {
     });
   });
 
-  describe('Group event handling', () => {
-    it('should provide onGroupEvent function', () => {
+  describe("Group event handling", () => {
+    it("should provide onGroupEvent function", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.onGroupEvent).toBe('function');
+      expect(typeof result.current.onGroupEvent).toBe("function");
     });
 
-    it('should provide removeGroupEventHandler function', () => {
+    it("should provide removeGroupEventHandler function", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.removeGroupEventHandler).toBe('function');
+      expect(typeof result.current.removeGroupEventHandler).toBe("function");
     });
 
-    it('should route group_event messages to event handlers, not message handlers', async () => {
+    it("should route group_event messages to event handlers, not message handlers", async () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       const eventHandler = jest.fn();
@@ -247,7 +259,9 @@ describe('WebSocketContext', () => {
         ws.onopen?.();
       });
       await act(async () => {
-        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+        ws.onmessage?.({
+          data: JSON.stringify({ type: "auth_success" }),
+        } as MessageEvent);
       });
       await act(async () => {
         await connectPromise;
@@ -257,22 +271,22 @@ describe('WebSocketContext', () => {
       await act(async () => {
         ws.onmessage?.({
           data: JSON.stringify({
-            type: 'group_event',
-            event: 'user_invited',
-            group_id: 'test-group-123',
+            type: "group_event",
+            event: "user_invited",
+            group_id: "test-group-123",
           }),
         } as MessageEvent);
       });
 
       expect(eventHandler).toHaveBeenCalledWith({
-        type: 'group_event',
-        event: 'user_invited',
-        group_id: 'test-group-123',
+        type: "group_event",
+        event: "user_invited",
+        group_id: "test-group-123",
       });
       expect(messageHandler).not.toHaveBeenCalled();
     });
 
-    it('should still route chat messages to message handlers after adding event handling', async () => {
+    it("should still route chat messages to message handlers after adding event handling", async () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       const eventHandler = jest.fn();
@@ -295,7 +309,9 @@ describe('WebSocketContext', () => {
         ws.onopen?.();
       });
       await act(async () => {
-        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+        ws.onmessage?.({
+          data: JSON.stringify({ type: "auth_success" }),
+        } as MessageEvent);
       });
       await act(async () => {
         await connectPromise;
@@ -303,13 +319,15 @@ describe('WebSocketContext', () => {
 
       // Send a regular chat message
       const chatMessage = {
-        id: 'msg-1',
-        group_id: 'group-1',
-        sender_id: 'user-1',
-        ciphertext: 'encrypted-data',
-        envelopes: [{ deviceId: 'd1', ephPubKey: 'k1', keyNonce: 'n1', sealedKey: 's1' }],
-        msgNonce: 'nonce-1',
-        messageType: 'text',
+        id: "msg-1",
+        group_id: "group-1",
+        sender_id: "user-1",
+        ciphertext: "encrypted-data",
+        envelopes: [
+          { deviceId: "d1", ephPubKey: "k1", keyNonce: "n1", sealedKey: "s1" },
+        ],
+        msgNonce: "nonce-1",
+        messageType: "text",
         timestamp: new Date().toISOString(),
       };
 
@@ -321,9 +339,11 @@ describe('WebSocketContext', () => {
       expect(eventHandler).not.toHaveBeenCalled();
     });
 
-    it('should handle malformed group events gracefully', async () => {
+    it("should handle malformed group events gracefully", async () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
 
       const eventHandler = jest.fn();
       act(() => {
@@ -342,7 +362,9 @@ describe('WebSocketContext', () => {
         ws.onopen?.();
       });
       await act(async () => {
-        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+        ws.onmessage?.({
+          data: JSON.stringify({ type: "auth_success" }),
+        } as MessageEvent);
       });
       await act(async () => {
         await connectPromise;
@@ -351,7 +373,7 @@ describe('WebSocketContext', () => {
       // Send malformed group event (missing group_id)
       await act(async () => {
         ws.onmessage?.({
-          data: JSON.stringify({ type: 'group_event', event: 'user_invited' }),
+          data: JSON.stringify({ type: "group_event", event: "user_invited" }),
         } as MessageEvent);
       });
 
@@ -361,7 +383,7 @@ describe('WebSocketContext', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should unregister event handler via removeGroupEventHandler', async () => {
+    it("should unregister event handler via removeGroupEventHandler", async () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       const eventHandler = jest.fn();
@@ -384,7 +406,9 @@ describe('WebSocketContext', () => {
         ws.onopen?.();
       });
       await act(async () => {
-        ws.onmessage?.({ data: JSON.stringify({ type: 'auth_success' }) } as MessageEvent);
+        ws.onmessage?.({
+          data: JSON.stringify({ type: "auth_success" }),
+        } as MessageEvent);
       });
       await act(async () => {
         await connectPromise;
@@ -394,9 +418,9 @@ describe('WebSocketContext', () => {
       await act(async () => {
         ws.onmessage?.({
           data: JSON.stringify({
-            type: 'group_event',
-            event: 'group_updated',
-            group_id: 'test-group-456',
+            type: "group_event",
+            event: "group_updated",
+            group_id: "test-group-456",
           }),
         } as MessageEvent);
       });
@@ -406,34 +430,34 @@ describe('WebSocketContext', () => {
     });
   });
 
-  describe('toggleGroupMuted', () => {
-    it('should call PUT on the mute endpoint', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.put.mockResolvedValue({ data: { muted: true } });
+  describe("toggleGroupMuted", () => {
+    it("should call PUT on the mute endpoint", async () => {
+      mockHttp.put.mockResolvedValue({ data: { muted: true } });
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       let response: { muted: boolean } | undefined;
       await act(async () => {
-        response = await result.current.toggleGroupMuted('group-123');
+        response = await result.current.toggleGroupMuted("group-123");
       });
 
-      expect(http.put).toHaveBeenCalledWith(
-        expect.stringContaining('/groups/group-123/mute')
+      expect(mockHttp.put).toHaveBeenCalledWith(
+        expect.stringContaining("/groups/group-123/mute"),
       );
       expect(response).toEqual({ muted: true });
     });
 
-    it('should return undefined on error', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.put.mockRejectedValue(new Error('Network error'));
+    it("should return undefined on error", async () => {
+      mockHttp.put.mockRejectedValue(new Error("Network error"));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       let response: { muted: boolean } | undefined;
       await act(async () => {
-        response = await result.current.toggleGroupMuted('group-123');
+        response = await result.current.toggleGroupMuted("group-123");
       });
 
       expect(response).toBeUndefined();
@@ -441,128 +465,155 @@ describe('WebSocketContext', () => {
     });
   });
 
-  describe('blockUser', () => {
-    it('should call POST on the block-user endpoint', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.post.mockResolvedValue({ data: { message: 'User blocked', removed_from_groups: ['g1'] } });
+  describe("leaveGroup", () => {
+    it("should call POST on the leave-group endpoint", async () => {
+      mockHttp.post.mockResolvedValue({ data: {} });
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await act(async () => {
+        await result.current.leaveGroup("group-789");
+      });
+
+      expect(mockHttp.post).toHaveBeenCalledWith(
+        expect.stringContaining("/ws/leave-group/group-789"),
+      );
+    });
+
+    it("should propagate errors on failure", async () => {
+      mockHttp.post.mockRejectedValue(new Error("Leave failed"));
+
+      const { result } = renderHook(() => useWebSocket(), { wrapper });
+
+      await expect(
+        act(async () => {
+          await result.current.leaveGroup("group-789");
+        }),
+      ).rejects.toThrow("Leave failed");
+    });
+  });
+
+  describe("blockUser", () => {
+    it("should call POST on the block-user endpoint", async () => {
+      mockHttp.post.mockResolvedValue({
+        data: { message: "User blocked", removed_from_groups: ["g1"] },
+      });
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       let response: { removed_from_groups?: string[] };
       await act(async () => {
-        response = await result.current.blockUser('user-123');
+        response = await result.current.blockUser("user-123");
       });
 
-      expect(http.post).toHaveBeenCalledWith(
-        expect.stringContaining('/ws/block-user'),
-        { user_id: 'user-123' }
+      expect(mockHttp.post).toHaveBeenCalledWith(
+        expect.stringContaining("/ws/block-user"),
+        { user_id: "user-123" },
       );
-      expect(response!.removed_from_groups).toEqual(['g1']);
+      expect(response!.removed_from_groups).toEqual(["g1"]);
     });
 
-    it('should propagate errors on failure', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.post.mockRejectedValue(new Error('Network error'));
+    it("should propagate errors on failure", async () => {
+      mockHttp.post.mockRejectedValue(new Error("Network error"));
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       await expect(
         act(async () => {
-          await result.current.blockUser('user-123');
-        })
-      ).rejects.toThrow('Network error');
+          await result.current.blockUser("user-123");
+        }),
+      ).rejects.toThrow("Network error");
     });
   });
 
-  describe('unblockUser', () => {
-    it('should call POST on the unblock-user endpoint', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.post.mockResolvedValue({ data: { message: 'User unblocked' } });
+  describe("unblockUser", () => {
+    it("should call POST on the unblock-user endpoint", async () => {
+      mockHttp.post.mockResolvedValue({ data: { message: "User unblocked" } });
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       await act(async () => {
-        await result.current.unblockUser('user-456');
+        await result.current.unblockUser("user-456");
       });
 
-      expect(http.post).toHaveBeenCalledWith(
-        expect.stringContaining('/ws/unblock-user'),
-        { user_id: 'user-456' }
+      expect(mockHttp.post).toHaveBeenCalledWith(
+        expect.stringContaining("/ws/unblock-user"),
+        { user_id: "user-456" },
       );
     });
 
-    it('should propagate errors on failure', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.post.mockRejectedValue(new Error('Server error'));
+    it("should propagate errors on failure", async () => {
+      mockHttp.post.mockRejectedValue(new Error("Server error"));
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       await expect(
         act(async () => {
-          await result.current.unblockUser('user-456');
-        })
-      ).rejects.toThrow('Server error');
+          await result.current.unblockUser("user-456");
+        }),
+      ).rejects.toThrow("Server error");
     });
   });
 
-  describe('getBlockedUsers', () => {
-    it('should call GET on the blocked-users endpoint', async () => {
-      const http = require('@/util/custom-axios').default;
+  describe("getBlockedUsers", () => {
+    it("should call GET on the blocked-users endpoint", async () => {
       const blockedUsers = [
-        { id: 'u1', username: 'blocked1', email: 'b1@test.com', blocked_at: '2025-01-01T00:00:00Z' },
-        { id: 'u2', username: 'blocked2', email: 'b2@test.com', blocked_at: '2025-01-02T00:00:00Z' },
+        {
+          id: "u1",
+          username: "blocked1",
+          email: "b1@test.com",
+          blocked_at: "2025-01-01T00:00:00Z",
+        },
+        {
+          id: "u2",
+          username: "blocked2",
+          email: "b2@test.com",
+          blocked_at: "2025-01-02T00:00:00Z",
+        },
       ];
-      http.get.mockResolvedValue({ data: blockedUsers });
+      mockHttp.get.mockResolvedValue({ data: blockedUsers });
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      let response: BlockedUser[];
-      await act(async () => {
-        response = await result.current.getBlockedUsers();
-      });
+      const response = await result.current.getBlockedUsers();
 
-      expect(http.get).toHaveBeenCalledWith(
-        expect.stringContaining('/ws/blocked-users')
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        expect.stringContaining("/ws/blocked-users"),
       );
       expect(response).toEqual(blockedUsers);
       expect(response).toHaveLength(2);
     });
 
-    it('should return empty array when no users are blocked', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.get.mockResolvedValue({ data: [] });
+    it("should return empty array when no users are blocked", async () => {
+      mockHttp.get.mockResolvedValue({ data: [] });
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      let response: BlockedUser[];
-      await act(async () => {
-        response = await result.current.getBlockedUsers();
-      });
+      const response = await result.current.getBlockedUsers();
 
       expect(response).toEqual([]);
     });
 
-    it('should propagate errors on failure', async () => {
-      const http = require('@/util/custom-axios').default;
-      http.get.mockRejectedValue(new Error('Unauthorized'));
+    it("should propagate errors on failure", async () => {
+      mockHttp.get.mockRejectedValue(new Error("Unauthorized"));
 
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
       await expect(
         act(async () => {
           await result.current.getBlockedUsers();
-        })
-      ).rejects.toThrow('Unauthorized');
+        }),
+      ).rejects.toThrow("Unauthorized");
     });
   });
 
-  describe('block user context integration', () => {
-    it('should provide blockUser, unblockUser, and getBlockedUsers functions', () => {
+  describe("block user context integration", () => {
+    it("should provide blockUser, unblockUser, and getBlockedUsers functions", () => {
       const { result } = renderHook(() => useWebSocket(), { wrapper });
 
-      expect(typeof result.current.blockUser).toBe('function');
-      expect(typeof result.current.unblockUser).toBe('function');
-      expect(typeof result.current.getBlockedUsers).toBe('function');
+      expect(typeof result.current.blockUser).toBe("function");
+      expect(typeof result.current.unblockUser).toBe("function");
+      expect(typeof result.current.getBlockedUsers).toBe("function");
     });
   });
 

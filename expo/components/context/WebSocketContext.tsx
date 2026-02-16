@@ -52,7 +52,7 @@ interface WebSocketContextType {
     group_id: string,
   ) => Promise<{ skipped_users: string[] }>;
   removeUserFromGroup: (email: string, group_id: string) => void;
-  leaveGroup: (group_id: string) => void;
+  leaveGroup: (group_id: string) => Promise<void>;
   getGroups: () => Promise<Group[]>;
   getUsers: () => Promise<User[]>;
   toggleGroupMuted: (
@@ -412,12 +412,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, [setConnected]);
 
-  const leaveGroup = useCallback(async (group_id: string) => {
-    return http
-      .post(`${httpBaseURL}/leave-group/${group_id}`)
-      .catch((error) => {
-        console.error("Error leaving group:", error);
-      });
+  const leaveGroup = useCallback(async (group_id: string): Promise<void> => {
+    await http.post(`${httpBaseURL}/leave-group/${group_id}`);
   }, []);
 
   const disconnect = useCallback(() => {
