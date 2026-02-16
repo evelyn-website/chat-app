@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useTimeFormat } from "@/components/context/TimeFormatContext";
+import { formatDateTimeShort } from "@/util/time-format";
 import { useGlobalStore } from "@/components/context/GlobalStoreContext";
 import type { InvitePreview } from "@/types/types";
 import Button from "@/components/Global/Button/Button";
@@ -86,14 +87,7 @@ export default function InviteScreen() {
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     const date = new Date(dateString);
-    return date.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: !use24HourTime,
-    });
+    return formatDateTimeShort(date, use24HourTime);
   };
 
   if (loading) {

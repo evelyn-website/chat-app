@@ -26,6 +26,7 @@ import * as Clipboard from "expo-clipboard";
 import * as FileSystem from "expo-file-system";
 import ContextMenu from "react-native-context-menu-view";
 import { useTimeFormat } from "../context/TimeFormatContext";
+import { formatTimeOnly } from "@/util/time-format";
 
 const MAX_TAP_DURATION = 250;
 const MAX_TAP_DISTANCE = 10;
@@ -63,11 +64,7 @@ const ImageBubble: React.FC<ImageBubbleProps> = React.memo(
     const isOwn = align === "right";
     const formattedTime = React.useMemo(() => {
       const messageDate = new Date(timestamp);
-      return messageDate.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: !use24HourTime,
-      });
+      return formatTimeOnly(messageDate, use24HourTime);
     }, [timestamp, use24HourTime]);
 
     const aspectRatio =

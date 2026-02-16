@@ -28,6 +28,7 @@ import {
 import { useUploadImageClear } from "@/hooks/useUploadImageClear";
 import GroupAvatarEditable from "../GroupAvatarEditable";
 import { useTimeFormat } from "../context/TimeFormatContext";
+import { formatDateTimeShort } from "@/util/time-format";
 
 const ChatSettingsMenu = (props: {
   group: Group;
@@ -360,14 +361,7 @@ const ChatSettingsMenu = (props: {
 
   const formatDate = (date: Date | null) => {
     if (!date) return "Not set";
-    return date.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: !use24HourTime,
-    });
+    return formatDateTimeShort(date, use24HourTime);
   };
 
   const renderEditableField = (

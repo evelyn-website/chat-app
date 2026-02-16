@@ -16,6 +16,7 @@ import {
 import GroupAvatarEditable from "@/components/GroupAvatarEditable";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTimeFormat } from "@/components/context/TimeFormatContext";
+import { formatDateTimeShort } from "@/util/time-format";
 
 export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
   const [tempGroupId] = useState(() => uuidv4());
@@ -120,14 +121,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
 
   const formatDate = (date: Date | null) => {
     if (!date) return "Not set";
-    return date.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: !use24HourTime,
-    });
+    return formatDateTimeShort(date, use24HourTime);
   };
 
   const handlePickImage = useCallback(async () => {

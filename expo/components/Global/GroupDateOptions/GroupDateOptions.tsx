@@ -7,6 +7,7 @@ import DateTimePicker, {
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import Button from "../Button/Button";
 import { useTimeFormat } from "@/components/context/TimeFormatContext";
+import { formatDatePartShort, formatTimePart } from "@/util/time-format";
 
 type GroupDateOptionsProps = {
   dateOptions: DateOptions;
@@ -43,17 +44,8 @@ const GroupDateOptions = ({
   const formatDate = (date: Date | null) => {
     if (!date) return { datePart: "Not set", timePart: "" };
 
-    const datePart = date.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-
-    const timePart = date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: !use24HourTime,
-    });
+    const datePart = formatDatePartShort(date);
+    const timePart = formatTimePart(date, use24HourTime);
 
     return { datePart, timePart };
   };
