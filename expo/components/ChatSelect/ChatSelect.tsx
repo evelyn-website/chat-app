@@ -39,7 +39,13 @@ export const ChatSelect = () => {
   useEffect(() => {
     store
       .loadGroups()
-      .then((savedGroups) => setGroups(savedGroups))
+      .then((savedGroups) => {
+        const now = new Date();
+        const nonExpired = savedGroups.filter(
+          (g) => !g.end_time || new Date(g.end_time) > now
+        );
+        setGroups(nonExpired);
+      })
       .catch((error) => console.error(error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupsRefreshKey]);

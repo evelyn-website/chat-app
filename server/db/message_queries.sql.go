@@ -223,6 +223,7 @@ WHERE u_member.id = $1
 AND m.created_at > ug.created_at
 AND ug.deleted_at IS NULL
 AND g.deleted_at IS NULL
+AND (g.end_time IS NULL OR g.end_time > NOW())
 `
 
 type GetRelevantMessagesRow struct {
