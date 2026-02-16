@@ -1,18 +1,5 @@
-import { View, StyleSheet } from "react-native";
-import ConnectionTesting from "@/components/ConnectionTesting";
+import { Redirect } from "expo-router";
 
-export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <ConnectionTesting />
-    </View>
-  );
+export default function Index() {
+  return <Redirect href="/(app)/groups" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
