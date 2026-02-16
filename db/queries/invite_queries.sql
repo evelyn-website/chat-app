@@ -6,8 +6,11 @@ RETURNING *;
 -- name: GetInviteByCode :one
 SELECT * FROM invites WHERE code = $1;
 
--- name: IncrementInviteUseCount :exec
-UPDATE invites SET use_count = use_count + 1 WHERE id = $1;
+-- name: IncrementInviteUseCount :execrows
+UPDATE invites
+SET use_count = use_count + 1
+WHERE id = $1
+  AND (max_uses = 0 OR use_count < max_uses);
 
 -- name: DeleteInvite :exec
 DELETE FROM invites WHERE id = $1;

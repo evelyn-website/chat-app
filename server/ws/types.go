@@ -108,7 +108,7 @@ type UnblockUserRequest struct {
 
 type CreateInviteRequest struct {
 	GroupID uuid.UUID `json:"group_id" binding:"required"`
-	MaxUses int       `json:"max_uses"`
+	MaxUses int       `json:"max_uses" binding:"min=0"`
 }
 
 type CreateInviteResponse struct {
@@ -137,7 +137,7 @@ type AcceptInviteResponse struct {
 
 // ClientEvent is a server-to-client lifecycle event sent over WebSocket.
 type ClientEvent struct {
-	Type    string    `json:"type"`     // always "group_event"
-	Event   string    `json:"event"`    // "user_invited", "user_removed", "group_updated", "group_deleted"
+	Type    string    `json:"type"`  // always "group_event"
+	Event   string    `json:"event"` // "user_invited", "user_removed", "group_updated", "group_deleted"
 	GroupID uuid.UUID `json:"group_id"`
 }

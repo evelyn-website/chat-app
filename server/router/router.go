@@ -48,7 +48,7 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	apiRoutes.POST("/invites/:code/accept", wsHandler.AcceptInvite)
 
 	// Invite preview (unauthenticated)
-	r.GET("/api/invites/:code", wsHandler.ValidateInvite)
+	r.GET("/public/invites/:code", wsHandler.ValidateInvite)
 
 	// auth routes group
 	authRoutes := r.Group("/auth/")

@@ -115,13 +115,19 @@ func (q *Queries) GetInvitesByGroup(ctx context.Context, groupID uuid.UUID) ([]I
 	return items, nil
 }
 
-const incrementInviteUseCount = `-- name: IncrementInviteUseCount :exec
-UPDATE invites SET use_count = use_count + 1 WHERE id = $1
+const incrementInviteUseCount = `-- name: IncrementInviteUseCount :execrows
+UPDATE invites
+SET use_count = use_count + 1
+WHERE id = $1
+  AND (max_uses = 0 OR use_count < max_uses)
 `
 
-func (q *Queries) IncrementInviteUseCount(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, incrementInviteUseCount, id)
-	return err
+func (q *Queries) IncrementInviteUseCount(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, incrementInviteUseCount, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertInvite = `-- name: InsertInvite :one

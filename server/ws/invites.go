@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"time"
@@ -26,6 +27,10 @@ func (h *Handler) CreateInvite(c *gin.Context) {
 	var req CreateInviteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.MaxUses > math.MaxInt32 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max_uses is too large"})
 		return
 	}
 
@@ -80,12 +85,13 @@ func (h *Handler) CreateInvite(c *gin.Context) {
 		return
 	}
 
+	maxUses := int32(req.MaxUses)
 	invite, err := h.db.InsertInvite(ctx, db.InsertInviteParams{
 		Code:      code,
 		GroupID:   req.GroupID,
 		CreatedBy: user.ID,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		MaxUses:   int32(req.MaxUses),
+		MaxUses:   maxUses,
 	})
 	if err != nil {
 		log.Printf("Error inserting invite: %v", err)
@@ -277,9 +283,14 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 		return
 	}
 
-	if err := qtx.IncrementInviteUseCount(ctx, invite.ID); err != nil {
+	rowsAffected, err := qtx.IncrementInviteUseCount(ctx, invite.ID)
+	if err != nil {
 		log.Printf("Error incrementing invite use count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process invite"})
+		return
+	}
+	if rowsAffected != 1 {
+		c.JSON(http.StatusGone, gin.H{"error": "Invite has reached maximum uses"})
 		return
 	}
 
@@ -295,8 +306,8 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 		log.Printf("Sent request to hub to process user %s addition to group %s via invite", user.ID.String(), invite.GroupID.String())
 	case <-ctx.Done():
 		log.Printf("Context cancelled while sending AddUserToGroupChan for invite acceptance")
-	default:
-		log.Printf("Warning: Hub AddUserToGroupChan full for invite acceptance user %s group %s", user.ID, invite.GroupID)
+	case <-time.After(2 * time.Second):
+		log.Printf("Warning: Timed out sending AddUserToGroupChan for invite acceptance user %s group %s", user.ID, invite.GroupID)
 	}
 
 	groupID := invite.GroupID

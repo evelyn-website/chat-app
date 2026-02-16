@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,12 +67,14 @@ func NullablePgTimestamp(s *time.Time) pgtype.Timestamp {
 
 func GenerateInviteCode(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
+	max := big.NewInt(int64(len(charset)))
+	result := make([]byte, length)
+	for i := range result {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		result[i] = charset[n.Int64()]
 	}
-	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
-	}
-	return string(b), nil
+	return string(result), nil
 }

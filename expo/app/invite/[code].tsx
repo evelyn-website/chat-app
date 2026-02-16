@@ -1,10 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
+import { View, Text, ActivityIndicator, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useWebSocket } from "@/components/context/WebSocketContext";
@@ -26,7 +21,11 @@ export default function InviteScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!code) return;
+    if (!code) {
+      setError("Invalid invite link.");
+      setLoading(false);
+      return;
+    }
 
     const fetchPreview = async () => {
       try {
@@ -50,6 +49,7 @@ export default function InviteScreen() {
     // If not logged in, save code and redirect to auth
     if (!user) {
       AsyncStorage.setItem(PENDING_INVITE_KEY, code).then(() => {
+        setLoading(false);
         router.replace("/(auth)");
       });
       return;

@@ -24,7 +24,6 @@ import axios from "axios";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
 
-
 interface WebSocketContextType {
   sendMessage: (packet: RawMessage) => void;
   connected: boolean;
@@ -48,16 +47,24 @@ interface WebSocketContextType {
     id: string,
     updateParams: UpdateGroupParams,
   ) => Promise<Group | undefined>;
-  inviteUsersToGroup: (emails: string[], group_id: string) => Promise<{ skipped_users: string[] }>;
+  inviteUsersToGroup: (
+    emails: string[],
+    group_id: string,
+  ) => Promise<{ skipped_users: string[] }>;
   removeUserFromGroup: (email: string, group_id: string) => void;
   leaveGroup: (group_id: string) => void;
   getGroups: () => Promise<Group[]>;
   getUsers: () => Promise<User[]>;
-  toggleGroupMuted: (groupId: string) => Promise<{ muted: boolean } | undefined>;
+  toggleGroupMuted: (
+    groupId: string,
+  ) => Promise<{ muted: boolean } | undefined>;
   blockUser: (userId: string) => Promise<{ removed_from_groups?: string[] }>;
   unblockUser: (userId: string) => Promise<void>;
   getBlockedUsers: () => Promise<BlockedUser[]>;
-  createInviteLink: (groupId: string, maxUses?: number) => Promise<CreateInviteResponse>;
+  createInviteLink: (
+    groupId: string,
+    maxUses?: number,
+  ) => Promise<CreateInviteResponse>;
   validateInvite: (code: string) => Promise<InvitePreview>;
   acceptInvite: (code: string) => Promise<AcceptInviteResponse>;
 }
@@ -301,7 +308,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                   try {
                     handler(parsedData as GroupEvent);
                   } catch (handlerError) {
-                    console.error("Error in group event handler:", handlerError);
+                    console.error(
+                      "Error in group event handler:",
+                      handlerError,
+                    );
                   }
                 });
               } else if (
@@ -419,7 +429,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const inviteUsersToGroup = useCallback(
-    async (emails: string[], group_id: string): Promise<{ skipped_users: string[] }> => {
+    async (
+      emails: string[],
+      group_id: string,
+    ): Promise<{ skipped_users: string[] }> => {
       const response = await http.post(`${httpBaseURL}/invite-users-to-group`, {
         group_id: group_id,
         emails: emails,
@@ -488,7 +501,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const createInviteLink = useCallback(
-    async (groupId: string, maxUses?: number): Promise<CreateInviteResponse> => {
+    async (
+      groupId: string,
+      maxUses?: number,
+    ): Promise<CreateInviteResponse> => {
       const response = await http.post(
         `${process.env.EXPO_PUBLIC_HOST}/api/invites`,
         {
@@ -503,8 +519,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const validateInvite = useCallback(
     async (code: string): Promise<InvitePreview> => {
+      // validateInvite intentionally uses axios instead of http because this is a
+      // public endpoint and http injects JWT/auth interceptors. Tradeoff: bypasses
+      // shared http defaults (timeouts/error handlers), so revisit if needed.
       const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_HOST}/api/invites/${code}`,
+        `${process.env.EXPO_PUBLIC_HOST}/public/invites/${code}`,
       );
       return response.data as InvitePreview;
     },
@@ -556,7 +575,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const onGroupEvent = useCallback((callback: (event: GroupEvent) => void) => {
     if (!groupEventHandlersRef.current.includes(callback)) {
-      groupEventHandlersRef.current = [...groupEventHandlersRef.current, callback];
+      groupEventHandlersRef.current = [
+        ...groupEventHandlersRef.current,
+        callback,
+      ];
     }
   }, []);
 
@@ -619,7 +641,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const socket = socketRef.current;
       if (connected && (!socket || socket.readyState !== WebSocket.OPEN)) {
-        console.log("Watchdog: connected state is stale, resetting and reconnecting");
+        console.log(
+          "Watchdog: connected state is stale, resetting and reconnecting",
+        );
         setConnected(false);
         if (!isReconnecting.current) {
           establishConnection().catch((err) =>
@@ -651,7 +675,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         // Network restored — debounce to avoid flapping during rapid transitions
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (!connected && !isReconnecting.current && !preventRetriesRef.current) {
+          if (
+            !connected &&
+            !isReconnecting.current &&
+            !preventRetriesRef.current
+          ) {
             console.log("NetInfo: network restored, attempting reconnection");
             establishConnection().catch((err) =>
               console.error("NetInfo reconnection failed:", err),

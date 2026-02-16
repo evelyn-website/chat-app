@@ -25,7 +25,7 @@ interface WhoAmIResult {
 }
 
 const AuthUtilsContext = createContext<AuthUtilsContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
@@ -45,8 +45,8 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
     try {
       const pendingCode = await AsyncStorage.getItem("pendingInviteCode");
       if (pendingCode) {
-        await AsyncStorage.removeItem("pendingInviteCode");
         const result = await acceptInvite(pendingCode);
+        await AsyncStorage.removeItem("pendingInviteCode");
         if (result.group_id) {
           refreshGroups();
         }
@@ -78,7 +78,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
 
         if (!user || forceRefresh) {
           const response = await http.get<User>(
-            `${process.env.EXPO_PUBLIC_HOST}/api/users/whoami`
+            `${process.env.EXPO_PUBLIC_HOST}/api/users/whoami`,
           );
           const loggedInUser = response.data;
           setUser(loggedInUser);
@@ -113,7 +113,14 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         return { user, deviceId: globalDeviceId };
       }
     },
-    [globalDeviceId, setDeviceId, user, setUser, connected, establishConnection]
+    [
+      globalDeviceId,
+      setDeviceId,
+      user,
+      setUser,
+      connected,
+      establishConnection,
+    ],
   );
 
   const login = useCallback(
@@ -130,7 +137,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
-          }
+          },
         );
         const { data } = response;
         await save("jwt", data.token);
@@ -145,14 +152,14 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite],
   );
 
   const signup = useCallback(
     async (
       username: string,
       email: string,
-      password: string
+      password: string,
     ): Promise<void> => {
       try {
         const { deviceId, publicKey } =
@@ -167,7 +174,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
-          }
+          },
         );
         const { data } = response;
         await save("jwt", data.token);
@@ -182,7 +189,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         throw error;
       }
     },
-    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite]
+    [setDeviceId, whoami, loadHistoricalMessages, handlePendingInvite],
   );
 
   const logout = useCallback(async () => {
