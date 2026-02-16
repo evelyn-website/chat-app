@@ -63,7 +63,7 @@ const MessageEntry = ({
     if (permissionResult.granted === false) {
       Alert.alert(
         "Permission Required",
-        "You've refused to allow this app to access your photos."
+        "You've refused to allow this app to access your photos.",
       );
       return;
     }
@@ -97,15 +97,18 @@ const MessageEntry = ({
     for (let i = 1; i <= count; i++) {
       const messageNum = i;
 
-      const promise = sendMessage(`Test message ${messageNum}`, group.id, recipientUserIds)
-        .catch((error) => {
-          console.error(`❌ [BURST] Error sending message ${messageNum}:`, error);
-        });
+      const promise = sendMessage(
+        `Test message ${messageNum}`,
+        group.id,
+        recipientUserIds,
+      ).catch((error) => {
+        console.error(`❌ [BURST] Error sending message ${messageNum}:`, error);
+      });
 
       promises.push(promise);
 
       // Small stagger to prevent exact simultaneous sends
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Wait for all to complete
@@ -150,8 +153,13 @@ const MessageEntry = ({
             autoCorrect
             spellCheck
             keyboardType="default"
-            className="flex-1 text-base text-gray-200 px-0 py-2 outline-0"
-            style={{ height: 40 }}
+            className="flex-1 text-gray-200 px-0 outline-0"
+            style={{
+              height: 40,
+              fontSize: 16,
+              lineHeight: 20,
+              paddingVertical: 0,
+            }}
             value={textContent}
             onChangeText={setTextContent}
             placeholder="Type a message..."

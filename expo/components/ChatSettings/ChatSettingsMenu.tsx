@@ -235,12 +235,14 @@ const ChatSettingsMenu = (props: {
     try {
       const result = await createInviteLink(currentGroup.id);
       await Share.share({
-        message: `Join ${currentGroup.name} on the app! ${result.invite_url}`,
+        message: `Join ${currentGroup.name} on Chat App! ${result.invite_url}`,
       });
     } catch (error) {
       console.error("Error sharing invite link:", error);
       const message =
-        error instanceof Error ? error.message : "Could not generate invite link. Please try again.";
+        error instanceof Error
+          ? error.message
+          : "Could not generate invite link. Please try again.";
       Alert.alert("Error", message);
     } finally {
       setIsGeneratingLink(false);
@@ -337,14 +339,14 @@ const ChatSettingsMenu = (props: {
               console.error("Error leaving group:", error);
               Alert.alert(
                 "Leave Failed",
-                "Could not leave the group. Please try again."
+                "Could not leave the group. Please try again.",
               );
             } finally {
               setIsLeaving(false);
             }
           },
         },
-      ]
+      ],
     );
   }, [
     currentGroup.id,
@@ -406,7 +408,8 @@ const ChatSettingsMenu = (props: {
     </View>
   );
 
-  const cardClassName = "w-full bg-white/5 border border-white/10 rounded-2xl p-4 mb-3";
+  const cardClassName =
+    "w-full bg-white/5 border border-white/10 rounded-2xl p-4 mb-3";
   const sectionTitleClassName = "text-sm font-semibold text-blue-200 mb-3";
 
   return (
@@ -456,9 +459,7 @@ const ChatSettingsMenu = (props: {
 
       {/* Group Details Card */}
       <View className={cardClassName}>
-        <Text className={sectionTitleClassName}>
-          Group Details
-        </Text>
+        <Text className={sectionTitleClassName}>Group Details</Text>
         {isEditing && currentUserIsAdmin
           ? renderEditableField(
               "Group Name",
@@ -552,9 +553,7 @@ const ChatSettingsMenu = (props: {
 
       {/* Notification Settings Card */}
       <View className={cardClassName}>
-        <Text className={sectionTitleClassName}>
-          Notifications
-        </Text>
+        <Text className={sectionTitleClassName}>Notifications</Text>
         <View className="flex-row justify-between items-center bg-black/20 rounded-xl p-3 border border-white/10">
           <Text className="text-sm text-zinc-100">Mute Notifications</Text>
           <Switch
@@ -586,9 +585,7 @@ const ChatSettingsMenu = (props: {
       {/* Share Invite Link Card */}
       {currentUserIsAdmin && (
         <View className={cardClassName}>
-          <Text className={sectionTitleClassName}>
-            Share Invite Link
-          </Text>
+          <Text className={sectionTitleClassName}>Share Invite Link</Text>
           <Button
             variant="primary"
             size="lg"
@@ -610,9 +607,7 @@ const ChatSettingsMenu = (props: {
       {/* User Invite Card */}
       {currentUserIsAdmin && (
         <View className={`${cardClassName} z-30 overflow-visible`}>
-          <Text className={sectionTitleClassName}>
-            Invite Friends
-          </Text>
+          <Text className={sectionTitleClassName}>Invite Friends</Text>
           <View className="z-20 bg-black/20 rounded-xl p-3 border border-white/10 overflow-visible">
             <UserInviteMultiselect
               placeholderText="Select friends to invite"
