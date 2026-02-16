@@ -79,7 +79,7 @@ export const ChatCreateMenu = ({ onSubmit }: { onSubmit: () => void }) => {
           if (result.skipped_users && result.skipped_users.length > 0) {
             Alert.alert(
               "Some Users Not Invited",
-              `The following users were not invited due to a block conflict: ${result.skipped_users.join(", ")}`,
+              `The following users could not be invited at this time: ${result.skipped_users.join(", ")}`,
             );
           }
         }
