@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,6 +65,11 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(req.Username) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Username cannot be blank"})
+		return
+	}
+
 	pwd := []byte(req.Password)
 	hash, err := bcrypt.GenerateFromPassword(pwd, 12)
 	if err != nil {
@@ -71,7 +77,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: req.Username, Email: req.Email, Password: pgtype.Text{String: string(hash), Valid: true}})
+	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: strings.TrimSpace(req.Username), Email: req.Email, Password: pgtype.Text{String: string(hash), Valid: true}})
 	if err != nil {
 		log.Printf("Error inserting user during signup for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Signup failed, possibly due to existing user or database issue."})
