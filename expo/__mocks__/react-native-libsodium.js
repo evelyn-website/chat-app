@@ -60,7 +60,10 @@ module.exports = {
     keyCounter++;
     const seed = `sign_keypair_${keyCounter}`;
     const publicKey = createDeterministicArray(seed + '_pub', SIGN_PUBLICKEYBYTES);
-    const privateKey = createDeterministicArray(seed + '_sec', SIGN_SECRETKEYBYTES);
+    const privateKey = new Uint8Array(SIGN_SECRETKEYBYTES);
+    privateKey.set(createDeterministicArray(seed + '_sec', 32), 0);
+    // Mirror libsodium behavior where the second half of secret key contains public key bytes.
+    privateKey.set(publicKey, 32);
     return {
       publicKey,
       privateKey,
@@ -227,7 +230,7 @@ module.exports = {
     if (!(privateKey instanceof Uint8Array)) {
       throw new Error('Private key must be Uint8Array');
     }
-    const seed = arrayToBase64(message) + '_sig';
+    const seed = arrayToBase64(message) + '_' + arrayToBase64(privateKey.slice(32)) + '_sig';
     return createDeterministicArray(seed, SIGN_BYTES);
   }),
 
@@ -241,7 +244,10 @@ module.exports = {
     if (!(publicKey instanceof Uint8Array)) {
       throw new Error('Public key must be Uint8Array');
     }
-    const expected = createDeterministicArray(arrayToBase64(message) + '_sig', SIGN_BYTES);
+    const expected = createDeterministicArray(
+      arrayToBase64(message) + '_' + arrayToBase64(publicKey) + '_sig',
+      SIGN_BYTES
+    );
     if (expected.length !== signature.length) return false;
     for (let i = 0; i < expected.length; i++) {
       if (expected[i] !== signature[i]) return false;

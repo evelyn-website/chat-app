@@ -4,6 +4,7 @@ import (
 	"chat-app-server/db"
 	"context"
 	"encoding/base64"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -48,6 +49,10 @@ func (h *AuthHandler) registerOrUpdateDeviceKey(
 	if err != nil {
 		log.Printf("Error decoding signing public key for user %s, device %s: %v", userID, deviceIdentifier, err)
 		return err
+	}
+	if len(signingPublicKeyBytes) != 32 {
+		log.Printf("Invalid signing public key length for user %s, device %s: got %d bytes, expected 32", userID, deviceIdentifier, len(signingPublicKeyBytes))
+		return errors.New("invalid signing public key length")
 	}
 
 	_, err = h.db.RegisterDeviceKey(ctx, db.RegisterDeviceKeyParams{

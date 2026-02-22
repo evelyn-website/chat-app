@@ -4,9 +4,14 @@ import (
 	"chat-app-server/db"
 	"chat-app-server/util"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,6 +156,19 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 			}
 			return
 		}
+		if clientMsg.ID == uuid.Nil {
+			log.Printf("Client %d (%s): Received E2EE message with missing ID. Discarding.", c.User.ID, c.User.Username)
+			continue
+		}
+		if strings.TrimSpace(clientMsg.Signature) == "" {
+			log.Printf("Client %d (%s): Received E2EE message with missing signature. Discarding.", c.User.ID, c.User.Username)
+			continue
+		}
+		signatureBytes, err := base64.StdEncoding.DecodeString(clientMsg.Signature)
+		if err != nil || len(signatureBytes) != ed25519.SignatureSize {
+			log.Printf("Client %d (%s): Invalid signature encoding/length for message %s. Discarding.", c.User.ID, c.User.Username, clientMsg.ID)
+			continue
+		}
 
 		isMember, err := util.UserInGroup(c.ctx, c.User.ID, clientMsg.GroupID, queries)
 		if err != nil {
@@ -162,6 +180,31 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 		if !isMember {
 			log.Printf("Client %d (%s) attempted to send E2EE message to unauthorized group %d. Discarding.",
 				c.User.ID, c.User.Username, clientMsg.GroupID)
+			continue
+		}
+		deviceKey, err := queries.GetDeviceKeyByIdentifier(c.ctx, db.GetDeviceKeyByIdentifierParams{
+			UserID:           c.User.ID,
+			DeviceIdentifier: c.DeviceIdentifier,
+		})
+		if err != nil {
+			log.Printf("Client %d (%s): Failed to fetch signing key for device %s: %v. Discarding.",
+				c.User.ID, c.User.Username, c.DeviceIdentifier, err)
+			continue
+		}
+		if len(deviceKey.SigningPublicKey) != ed25519.PublicKeySize {
+			log.Printf("Client %d (%s): Invalid signing public key length for device %s: got %d, expected %d. Discarding.",
+				c.User.ID, c.User.Username, c.DeviceIdentifier, len(deviceKey.SigningPublicKey), ed25519.PublicKeySize)
+			continue
+		}
+		canonicalPayload, err := buildCanonicalSignedPayload(clientMsg, c.User.ID, c.DeviceIdentifier)
+		if err != nil {
+			log.Printf("Client %d (%s): Failed to build canonical payload for message %s: %v. Discarding.",
+				c.User.ID, c.User.Username, clientMsg.ID, err)
+			continue
+		}
+		if !ed25519.Verify(deviceKey.SigningPublicKey, []byte(canonicalPayload), signatureBytes) {
+			log.Printf("Client %d (%s): Signature verification failed for message %s in group %s. Discarding.",
+				c.User.ID, c.User.Username, clientMsg.ID, clientMsg.GroupID)
 			continue
 		}
 
@@ -188,4 +231,57 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 			log.Printf("Hub broadcast channel full for client %d (%s). Message for group %d dropped.", c.User.ID, c.User.Username, hubMessage.GroupID)
 		}
 	}
+}
+
+type canonicalEnvelope struct {
+	DeviceID  string `json:"deviceId"`
+	EphPubKey string `json:"ephPubKey"`
+	KeyNonce  string `json:"keyNonce"`
+	SealedKey string `json:"sealedKey"`
+}
+
+type canonicalPayload struct {
+	ID             string         `json:"id"`
+	GroupID        string         `json:"group_id"`
+	SenderID       string         `json:"sender_id"`
+	SenderDeviceID string         `json:"sender_device_id"`
+	MessageType    db.MessageType `json:"messageType"`
+	MsgNonce       string         `json:"msgNonce"`
+	Ciphertext     string         `json:"ciphertext"`
+	Envelopes      string         `json:"envelopes"`
+}
+
+func buildCanonicalSignedPayload(msg ClientSentE2EMessage, senderID uuid.UUID, senderDeviceID string) (string, error) {
+	normalized := make([]canonicalEnvelope, 0, len(msg.Envelopes))
+	for _, env := range msg.Envelopes {
+		normalized = append(normalized, canonicalEnvelope{
+			DeviceID:  env.DeviceID,
+			EphPubKey: env.EphPubKey,
+			KeyNonce:  env.KeyNonce,
+			SealedKey: env.SealedKey,
+		})
+	}
+	sort.Slice(normalized, func(i, j int) bool {
+		return normalized[i].DeviceID < normalized[j].DeviceID
+	})
+	envelopesJSON, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+
+	payload := canonicalPayload{
+		ID:             msg.ID.String(),
+		GroupID:        msg.GroupID.String(),
+		SenderID:       senderID.String(),
+		SenderDeviceID: senderDeviceID,
+		MessageType:    msg.MessageType,
+		MsgNonce:       msg.MsgNonce,
+		Ciphertext:     msg.Ciphertext,
+		Envelopes:      string(envelopesJSON),
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(payloadJSON), nil
 }
