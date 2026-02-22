@@ -138,7 +138,8 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [state, dispatch] = useReducer(messageReducer, initialState);
   const { onMessage, removeMessageHandler } = useWebSocket();
-  const { store, deviceId: globalDeviceId, refreshGroups } = useGlobalStore();
+  const { store, deviceId: globalDeviceId, refreshGroups, relevantDeviceKeys } =
+    useGlobalStore();
 
   const [optimistic, setOptimistic] = useState<
     Record<string, OptimisticMessageItem[]>
@@ -239,12 +240,20 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         const processedMessages: DbMessage[] = [];
 
         for (const rawMsg of rawMessages) {
+          const senderSigningPublicKey = (
+            relevantDeviceKeys[rawMsg.sender_id] || []
+          ).find((key) => key.deviceId === rawMsg.sender_device_id)
+            ?.signingPublicKey;
+          if (!senderSigningPublicKey) {
+            continue;
+          }
           const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
             rawMsg,
             preferredDeviceId,
             rawMsg.sender_id,
             rawMsg.id,
             rawMsg.timestamp,
+            senderSigningPublicKey,
             rawMsg.sender_username
           );
           if (baseProcessed) {
@@ -311,6 +320,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       store,
       globalDeviceId,
       refreshGroups,
+      relevantDeviceKeys,
     ]
   );
 
@@ -344,6 +354,11 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           rawMsg.sender_id,
           rawMsg.id,
           rawMsg.timestamp,
+          (
+            (relevantDeviceKeys[rawMsg.sender_id] || []).find(
+              (key) => key.deviceId === rawMsg.sender_device_id
+            )?.signingPublicKey || new Uint8Array(0)
+          ),
           rawMsg.sender_username
         );
 
@@ -383,6 +398,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     store,
     globalDeviceId,
     refreshGroups,
+    relevantDeviceKeys,
     updateOptimisticMessage,
   ]);
 

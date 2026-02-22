@@ -185,14 +185,17 @@ describe('encryptionService', () => {
 
   describe('Message Processing (Incoming)', () => {
     describe('processAndDecodeIncomingMessage', () => {
+      const mockSenderSigningPublicKey = new Uint8Array(32).fill(9);
       const mockRawMessage: RawMessage = {
         id: 'msg-123',
         group_id: 'group-456',
         sender_id: 'sender-789',
+        sender_device_id: 'device-1',
         timestamp: '2024-01-01T00:00:00Z',
         messageType: MessageType.TEXT,
         msgNonce: uint8ArrayToBase64(new Uint8Array(24).fill(1)),
         ciphertext: uint8ArrayToBase64(new Uint8Array([1, 2, 3, 4])),
+        signature: uint8ArrayToBase64(new Uint8Array(64).fill(8)),
         envelopes: [
           {
             deviceId: 'device-1',
@@ -209,13 +212,18 @@ describe('encryptionService', () => {
         ],
       };
 
+      beforeEach(() => {
+        (sodium.crypto_sign_verify_detached as jest.Mock).mockReturnValue(true);
+      });
+
       it('should process message with matching envelope', () => {
         const result = processAndDecodeIncomingMessage(
           mockRawMessage,
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).not.toBeNull();
@@ -231,7 +239,8 @@ describe('encryptionService', () => {
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).not.toBeNull();
@@ -248,7 +257,8 @@ describe('encryptionService', () => {
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         const result2 = processAndDecodeIncomingMessage(
@@ -256,7 +266,8 @@ describe('encryptionService', () => {
           'device-2',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result1).not.toBeNull();
@@ -273,7 +284,8 @@ describe('encryptionService', () => {
           'device-nonexistent',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).toBeNull();
@@ -290,7 +302,8 @@ describe('encryptionService', () => {
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).toBeNull();
@@ -302,7 +315,8 @@ describe('encryptionService', () => {
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).not.toBeNull();
@@ -315,7 +329,8 @@ describe('encryptionService', () => {
           'device-1',
           'sender-789',
           'msg-123',
-          '2024-01-01T00:00:00Z'
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
         );
 
         expect(result).not.toBeNull();
@@ -327,6 +342,11 @@ describe('encryptionService', () => {
 
   describe('Message Encryption (Outgoing)', () => {
     describe('encryptAndPrepareMessageForSending', () => {
+      const mockSignatureContext = {
+        senderId: 'sender-789',
+        senderDeviceId: 'device-1',
+        senderSigningPrivateKey: new Uint8Array(64).fill(9),
+      };
       const recipientDeviceKeys = [
         {
           deviceId: 'device-1',
@@ -344,7 +364,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -362,7 +383,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -377,7 +399,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -396,7 +419,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           singleRecipient,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -415,7 +439,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           multipleRecipients,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -428,7 +453,8 @@ describe('encryptionService', () => {
           '',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -440,7 +466,8 @@ describe('encryptionService', () => {
           'Hello 👋 World 🌍',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).not.toBeNull();
@@ -452,7 +479,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(sodium.crypto_secretbox_keygen).toHaveBeenCalled();
@@ -473,7 +501,8 @@ describe('encryptionService', () => {
           'Hello, World!',
           'group-456',
           recipientDeviceKeys,
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         );
 
         expect(result).toBeNull();
@@ -487,6 +516,7 @@ describe('encryptionService', () => {
         id: 'msg-123',
         group_id: 'group-456',
         sender_id: 'sender-789',
+        sender_device_id: 'device-1',
         timestamp: '2024-01-01T00:00:00Z',
         client_seq: null,
         client_timestamp: null,
@@ -498,6 +528,7 @@ describe('encryptionService', () => {
         sender_ephemeral_public_key: new Uint8Array(32).fill(2),
         sym_key_encryption_nonce: new Uint8Array(24).fill(3),
         sealed_symmetric_key: new Uint8Array(48).fill(4),
+        signature: new Uint8Array(64).fill(8),
       };
 
       const mockPrivateKey = new Uint8Array(32).fill(5);
@@ -860,13 +891,19 @@ describe('encryptionService', () => {
 
   describe('ConcurrencyLimiter Integration', () => {
     it('should handle concurrent encryption operations', async () => {
+      const mockSignatureContext = {
+        senderId: 'sender-789',
+        senderDeviceId: 'device-1',
+        senderSigningPrivateKey: new Uint8Array(64).fill(9),
+      };
       const operations = Array.from({ length: 10 }, (_, i) =>
         encryptAndPrepareMessageForSending(
           `msg-${i}`,
           `Message ${i}`,
           'group-123',
           [{ deviceId: 'device-1', publicKey: new Uint8Array(32) }],
-          MessageType.TEXT
+          MessageType.TEXT,
+          mockSignatureContext
         )
       );
 
@@ -883,6 +920,7 @@ describe('encryptionService', () => {
         id: 'msg-123',
         group_id: 'group-456',
         sender_id: 'sender-789',
+        sender_device_id: 'device-1',
         timestamp: '2024-01-01T00:00:00Z',
         client_seq: null,
         client_timestamp: null,
@@ -892,6 +930,7 @@ describe('encryptionService', () => {
         sender_ephemeral_public_key: new Uint8Array(32),
         sym_key_encryption_nonce: new Uint8Array(24),
         sealed_symmetric_key: new Uint8Array(48),
+        signature: new Uint8Array(64).fill(8),
       };
 
       const operations = Array.from({ length: 10 }, () =>

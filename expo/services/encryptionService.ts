@@ -105,6 +105,7 @@ export const processAndDecodeIncomingMessage = (
   senderId: string,
   messageId: string,
   timestamp: string,
+  senderSigningPublicKey: Uint8Array,
   senderUsername?: string
 ): DbMessage | null => {
   if (!rawMessage.sender_device_id || !rawMessage.signature) {
@@ -124,6 +125,28 @@ export const processAndDecodeIncomingMessage = (
   }
 
   try {
+    const payloadToVerify = buildCanonicalSignedPayload({
+      id: rawMessage.id,
+      group_id: rawMessage.group_id,
+      sender_id: rawMessage.sender_id,
+      sender_device_id: rawMessage.sender_device_id,
+      messageType: rawMessage.messageType,
+      msgNonce: rawMessage.msgNonce,
+      ciphertext: rawMessage.ciphertext,
+      envelopesCanonical: buildCanonicalEnvelopes(rawMessage.envelopes),
+    });
+    const signatureIsValid = sodium.crypto_sign_verify_detached(
+      base64ToUint8Array(rawMessage.signature),
+      new TextEncoder().encode(payloadToVerify),
+      senderSigningPublicKey
+    );
+    if (!signatureIsValid) {
+      console.error(
+        `Signature verification failed while processing message ${messageId}.`
+      );
+      return null;
+    }
+
     const clientMessage: DbMessage = {
       id: messageId,
       group_id: rawMessage.group_id,
@@ -233,6 +256,7 @@ export const encryptAndPrepareMessageForSending = async (
         messageType: messageToSend.messageType,
         msgNonce: messageToSend.msgNonce,
         ciphertext: messageToSend.ciphertext,
+        envelopesCanonical: buildCanonicalEnvelopes(messageToSend.envelopes),
       });
       const payloadBytes = new TextEncoder().encode(canonicalPayload);
       const signature = sodium.crypto_sign_detached(
@@ -252,39 +276,10 @@ export const encryptAndPrepareMessageForSending = async (
 // --- Decryption (For Displaying Messages) ---
 export const decryptStoredMessage = async (
   storedMessage: DbMessage,
-  deviceLongTermPrivateKey: Uint8Array,
-  senderSigningPublicKey: Uint8Array
+  deviceLongTermPrivateKey: Uint8Array
 ): Promise<string | null> => {
   return textDecryptionLimiter.execute(async () => {
     try {
-      if (!senderSigningPublicKey || senderSigningPublicKey.length === 0) {
-        console.error(
-          `Missing sender signing key for message ${storedMessage.id}.`
-        );
-        return null;
-      }
-      const payloadToVerify = buildCanonicalSignedPayload({
-        id: storedMessage.id,
-        group_id: storedMessage.group_id,
-        sender_id: storedMessage.sender_id,
-        sender_device_id: storedMessage.sender_device_id,
-        messageType: storedMessage.message_type,
-        msgNonce: uint8ArrayToBase64(storedMessage.msg_nonce),
-        ciphertext: uint8ArrayToBase64(storedMessage.ciphertext),
-      });
-      const payloadBytes = new TextEncoder().encode(payloadToVerify);
-      const signatureIsValid = sodium.crypto_sign_verify_detached(
-        storedMessage.signature,
-        payloadBytes,
-        senderSigningPublicKey
-      );
-      if (!signatureIsValid) {
-        console.error(
-          `Signature verification failed for message ${storedMessage.id}.`
-        );
-        return null;
-      }
-
       const symKey = sodium.crypto_box_open_easy(
         storedMessage.sealed_symmetric_key,
         storedMessage.sym_key_encryption_nonce,
@@ -404,6 +399,7 @@ type SignedPayloadInput = {
   messageType: MessageType;
   msgNonce: string;
   ciphertext: string;
+  envelopesCanonical: string;
 };
 
 const buildCanonicalSignedPayload = (payload: SignedPayloadInput): string => {
@@ -416,7 +412,22 @@ const buildCanonicalSignedPayload = (payload: SignedPayloadInput): string => {
     messageType: payload.messageType,
     msgNonce: payload.msgNonce,
     ciphertext: payload.ciphertext,
+    envelopes: payload.envelopesCanonical,
   });
+};
+
+type EnvelopeLike = RawMessage["envelopes"][number];
+
+const buildCanonicalEnvelopes = (envelopes: EnvelopeLike[]): string => {
+  const normalized = [...envelopes]
+    .sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+    .map((env) => ({
+      deviceId: env.deviceId,
+      ephPubKey: env.ephPubKey,
+      keyNonce: env.keyNonce,
+      sealedKey: env.sealedKey,
+    }));
+  return JSON.stringify(normalized);
 };
 
 /**

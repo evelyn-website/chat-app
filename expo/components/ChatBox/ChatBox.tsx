@@ -54,7 +54,7 @@ const compareUint8Arrays = (
 };
 
 export default function ChatBox({ group }: { group: Group }) {
-  const { user, relevantDeviceKeys } = useGlobalStore();
+  const { user } = useGlobalStore();
   const { getMessagesForGroup, optimistic } = useMessageStore();
   const groupMessages = useMemo(() => {
     return getMessagesForGroup(group.id);
@@ -207,20 +207,9 @@ export default function ChatBox({ group }: { group: Group }) {
             currentMsg.id,
           )!;
         } else {
-          const senderDeviceKeys =
-            relevantDeviceKeys[currentMsg.sender_id] || [];
-          const senderDeviceKey = senderDeviceKeys.find(
-            (key) => key.deviceId === currentMsg.sender_device_id,
-          );
-          if (!senderDeviceKey?.signingPublicKey) {
-            decryptedContent = "[Signature Verification Failed]";
-            newCacheEntries.set(currentMsg.id, decryptedContent);
-            continue;
-          }
           const plaintext = await encryptionService.decryptStoredMessage(
             currentMsg,
             devicePrivateKey,
-            senderDeviceKey.signingPublicKey,
           );
 
           if (plaintext) {
@@ -460,7 +449,6 @@ export default function ChatBox({ group }: { group: Group }) {
     user?.id,
     optimisticMessages,
     group.id,
-    relevantDeviceKeys,
   ]);
 
   const flatListProps = useMemo(
