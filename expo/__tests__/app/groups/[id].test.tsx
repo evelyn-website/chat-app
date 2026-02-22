@@ -1,6 +1,6 @@
 import React from "react";
 import { render, waitFor } from "@testing-library/react-native";
-import GroupPage from "../[id]";
+import GroupPage from "@/app/(app)/groups/[id]";
 
 const mockSetActiveGroupId = jest.fn();
 const mockMarkGroupRead = jest.fn().mockResolvedValue(undefined);
@@ -9,7 +9,13 @@ const mockLoadGroups = jest.fn();
 const mockIsAvailable = jest.fn().mockReturnValue(true);
 
 // Stable references to avoid infinite re-renders (these are in effect deps)
-const mockUser = { id: "user-1", username: "test", email: "test@test.com", created_at: "", updated_at: "" };
+const mockUser = {
+  id: "user-1",
+  username: "test",
+  email: "test@test.com",
+  created_at: "",
+  updated_at: "",
+};
 const mockStore = {
   loadGroups: mockLoadGroups,
   markGroupRead: mockMarkGroupRead,
@@ -46,7 +52,9 @@ jest.mock("expo-router", () => ({
 // Mock uuid
 jest.mock("uuid", () => ({
   validate: (id: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id,
+    ),
 }));
 
 // Mock ChatBox
@@ -178,7 +186,7 @@ describe("GroupPage - activeGroupId management", () => {
     await waitFor(() => {
       expect(consoleSpy).toHaveBeenCalledWith(
         "Error marking group as read on unmount:",
-        expect.any(Error)
+        expect.any(Error),
       );
     });
 
@@ -199,7 +207,7 @@ describe("GroupPage - activeGroupId management", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     jest.clearAllMocks();
 
-    // Simulate groupsRefreshKey incrementing — currentGroup is null so
+    // Simulate groupsRefreshKey incrementing - currentGroup is null so
     // the groupsRefreshKey effect guard should prevent markGroupRead
     mockGroupsRefreshKey = 1;
     rerender(<GroupPage />);

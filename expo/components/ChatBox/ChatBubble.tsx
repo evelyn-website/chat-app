@@ -11,6 +11,8 @@ import type { MessageUser } from "@/types/types";
 import ContextMenu from "react-native-context-menu-view";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { useTimeFormat } from "../context/TimeFormatContext";
+import { formatTimeOnly } from "@/util/time-format";
 
 export interface ChatBubbleProps {
   prevUserId: string;
@@ -33,6 +35,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
     showTimestamp = false,
   }) => {
     const isOwn = align === "right";
+    const { use24HourTime } = useTimeFormat();
 
     const formattedTime = React.useMemo(() => {
       const messageDate = new Date(timestamp);
@@ -40,13 +43,8 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
         return "Invalid time";
       }
 
-      const timeFormatOptions: Intl.DateTimeFormatOptions = {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      };
-      return messageDate.toLocaleTimeString(undefined, timeFormatOptions);
-    }, [timestamp]);
+      return formatTimeOnly(messageDate, use24HourTime);
+    }, [timestamp, use24HourTime]);
 
     const timestampOpacity = useDerivedValue(() => {
       if (!showTimestamp || !swipeX) return 0;
