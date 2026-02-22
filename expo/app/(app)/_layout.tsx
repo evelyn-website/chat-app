@@ -150,22 +150,22 @@ const AppLayout = () => {
     deviceKeysIntervalRef.current = setInterval(fetchDeviceKeys, POLL_INTERVAL);
   }, [clearAllIntervals, fetchGroups, fetchUsers, fetchDeviceKeys]);
 
-  const runCatchUpSync = useCallback(() => {
-    fetchGroups();
-    fetchUsers();
-    loadHistoricalMessages();
-    fetchDeviceKeys();
+  const runCatchUpSync = useCallback(async () => {
+    // Load signing keys first so strict signature verification can process history.
+    await fetchDeviceKeys();
+    await loadHistoricalMessages();
+    await Promise.all([fetchGroups(), fetchUsers()]);
   }, [fetchGroups, fetchUsers, loadHistoricalMessages, fetchDeviceKeys]);
 
   useEffect(() => {
     if (user && deviceId) {
       // Initial fetch on mount
-      runCatchUpSync();
+      void runCatchUpSync();
       startIntervals();
 
       const handleAppStateChange = (nextState: AppStateStatus) => {
         if (nextState === "active") {
-          runCatchUpSync();
+          void runCatchUpSync();
           startIntervals();
         } else {
           clearAllIntervals();
@@ -186,7 +186,7 @@ const AppLayout = () => {
   const prevWsConnected = useRef<boolean | null>(null);
   useEffect(() => {
     if (prevWsConnected.current === false && wsConnected && user && deviceId) {
-      loadHistoricalMessages();
+      void loadHistoricalMessages();
     }
     prevWsConnected.current = wsConnected;
   }, [wsConnected, user, deviceId, loadHistoricalMessages]);

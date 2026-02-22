@@ -148,6 +148,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const globalClientSequenceRef = useRef(0);
   const hasLoadedHistoricalMessagesRef = useRef(false);
   const optimisticRef = useRef<Record<string, OptimisticMessageItem[]>>({});
+  const relevantDeviceKeysRef = useRef(relevantDeviceKeys);
 
   const getNextClientSeq = useCallback(() => {
     return ++globalClientSequenceRef.current;
@@ -210,6 +211,10 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     optimisticRef.current = optimistic;
   }, [optimistic]);
 
+  useEffect(() => {
+    relevantDeviceKeysRef.current = relevantDeviceKeys;
+  }, [relevantDeviceKeys]);
+
   const isSyncingHistoricalMessagesRef = useRef(false);
 
   const loadHistoricalMessages = useCallback(
@@ -238,13 +243,15 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         const rawMessages: RawMessage[] = response.data;
         const processedMessages: DbMessage[] = [];
+        let skippedForMissingSigningKey = 0;
 
         for (const rawMsg of rawMessages) {
           const senderSigningPublicKey = (
-            relevantDeviceKeys[rawMsg.sender_id] || []
+            relevantDeviceKeysRef.current[rawMsg.sender_id] || []
           ).find((key) => key.deviceId === rawMsg.sender_device_id)
             ?.signingPublicKey;
           if (!senderSigningPublicKey) {
+            skippedForMissingSigningKey++;
             continue;
           }
           const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
@@ -270,15 +277,19 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           // an envelope for this device - this is expected for historical messages
         }
 
-        // Only clear messages on the first historical load to prevent flash
+        // Only replace the full local snapshot when we can process every server message.
+        // If some messages are skipped due to missing signing keys, merge instead to avoid
+        // wiping locally cached history during startup races.
         const isFirstLoad = !hasLoadedHistoricalMessagesRef.current;
-        await store.saveMessages(processedMessages, isFirstLoad);
+        const canReplaceSnapshot =
+          isFirstLoad && skippedForMissingSigningKey === 0;
+        await store.saveMessages(processedMessages, canReplaceSnapshot);
 
         // Mark that we've loaded historical messages at least once
         hasLoadedHistoricalMessagesRef.current = true;
 
         dispatch({
-          type: isFirstLoad ? "SET_HISTORICAL_MESSAGES" : "MERGE_MESSAGES",
+          type: canReplaceSnapshot ? "SET_HISTORICAL_MESSAGES" : "MERGE_MESSAGES",
           payload: processedMessages,
         });
         dispatch({ type: "SET_ERROR", payload: null });
@@ -320,7 +331,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       store,
       globalDeviceId,
       refreshGroups,
-      relevantDeviceKeys,
     ]
   );
 
@@ -348,19 +358,24 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const baseProcessed =
-        encryptionService.processAndDecodeIncomingMessage(
-          rawMsg,
-          globalDeviceId,
-          rawMsg.sender_id,
-          rawMsg.id,
-          rawMsg.timestamp,
-          (
-            (relevantDeviceKeys[rawMsg.sender_id] || []).find(
-              (key) => key.deviceId === rawMsg.sender_device_id
-            )?.signingPublicKey || new Uint8Array(0)
-          ),
-          rawMsg.sender_username
-        );
+        (() => {
+          const senderSigningPublicKey = (
+            relevantDeviceKeysRef.current[rawMsg.sender_id] || []
+          ).find((key) => key.deviceId === rawMsg.sender_device_id)
+            ?.signingPublicKey;
+          if (!senderSigningPublicKey) {
+            return null;
+          }
+          return encryptionService.processAndDecodeIncomingMessage(
+            rawMsg,
+            globalDeviceId,
+            rawMsg.sender_id,
+            rawMsg.id,
+            rawMsg.timestamp,
+            senderSigningPublicKey,
+            rawMsg.sender_username
+          );
+        })();
 
       if (baseProcessed) {
         const processedMessage: DbMessage = {
@@ -398,7 +413,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     store,
     globalDeviceId,
     refreshGroups,
-    relevantDeviceKeys,
     updateOptimisticMessage,
   ]);
 
