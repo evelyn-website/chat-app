@@ -2,7 +2,7 @@ import React from "react";
 import { Alert } from "react-native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import SettingsScreen from "./settings";
+import SettingsScreen from "@/app/(app)/settings";
 
 const mockLogout = jest.fn();
 const mockSetUse24HourTime = jest.fn().mockResolvedValue(undefined);
