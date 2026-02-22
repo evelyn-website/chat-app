@@ -6,10 +6,12 @@ INSERT INTO messages (
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, user_id, group_id, created_at, updated_at, ciphertext, message_type, msg_nonce, key_envelopes;
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, user_id, group_id, created_at, updated_at, ciphertext, message_type, msg_nonce, key_envelopes, sender_device_identifier, signature;
 
 -- name: GetMessageById :one
 SELECT
@@ -21,7 +23,9 @@ SELECT
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 FROM messages
 WHERE id = $1;
 
@@ -36,7 +40,9 @@ SELECT
     m.ciphertext,
     m.message_type,
     m.msg_nonce,
-    m.key_envelopes
+    m.key_envelopes,
+    m.sender_device_identifier,
+    m.signature
 FROM messages m
 JOIN users u ON m.user_id = u.id
 WHERE m.group_id = $1;
@@ -51,7 +57,9 @@ SELECT
     m.ciphertext,
     m.message_type,
     m.msg_nonce,
-    m.key_envelopes
+    m.key_envelopes,
+    m.sender_device_identifier,
+    m.signature
 FROM messages m
 JOIN user_groups ug ON ug.group_id = m.group_id
 JOIN users u_member ON ug.user_id = u_member.id 
@@ -83,7 +91,9 @@ SELECT
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 FROM messages
 ORDER BY created_at DESC;
 

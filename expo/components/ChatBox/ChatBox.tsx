@@ -28,7 +28,11 @@ import { useMessageStore } from "../context/MessageStoreContext";
 import { Group, ImageMessageContent } from "@/types/types";
 import * as deviceService from "@/services/deviceService";
 import * as encryptionService from "@/services/encryptionService";
-import { DisplayableItem, TextDisplayableItem, ImageDisplayableItem } from "./types";
+import {
+  DisplayableItem,
+  TextDisplayableItem,
+  ImageDisplayableItem,
+} from "./types";
 import ImageBubble from "./ImageBubble";
 import { router } from "expo-router";
 import { DEBUG } from "@/utils/debug";
@@ -38,7 +42,7 @@ const HAPTIC_THRESHOLD = -40;
 
 const compareUint8Arrays = (
   a: Uint8Array | null,
-  b: Uint8Array | null
+  b: Uint8Array | null,
 ): boolean => {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -50,7 +54,7 @@ const compareUint8Arrays = (
 };
 
 export default function ChatBox({ group }: { group: Group }) {
-  const { user } = useGlobalStore();
+  const { user, relevantDeviceKeys } = useGlobalStore();
   const { getMessagesForGroup, optimistic } = useMessageStore();
   const groupMessages = useMemo(() => {
     return getMessagesForGroup(group.id);
@@ -85,12 +89,12 @@ export default function ChatBox({ group }: { group: Group }) {
   const hapticTriggered = useSharedValue(false);
 
   const [devicePrivateKey, setDevicePrivateKey] = useState<Uint8Array | null>(
-    null
+    null,
   );
   const prevDevicePrivateKeyRef = useRef<Uint8Array | null>(null);
 
   const usersMapRef = useRef<Record<string, { id: string; username: string }>>(
-    {}
+    {},
   );
 
   useEffect(() => {
@@ -124,7 +128,10 @@ export default function ChatBox({ group }: { group: Group }) {
     // Backfill from messages that have sender_username (e.g. removed users)
     for (const msg of groupMessages) {
       if (msg.sender_username && !newMap[msg.sender_id]) {
-        newMap[msg.sender_id] = { id: msg.sender_id, username: msg.sender_username };
+        newMap[msg.sender_id] = {
+          id: msg.sender_id,
+          username: msg.sender_username,
+        };
       }
     }
     usersMapRef.current = newMap;
@@ -160,7 +167,7 @@ export default function ChatBox({ group }: { group: Group }) {
       // If it has, invalidate the entire cache and re-decrypt everything.
       const keyHasChanged = !compareUint8Arrays(
         prevDevicePrivateKeyRef.current,
-        devicePrivateKey
+        devicePrivateKey,
       );
 
       if (keyHasChanged && computeSeqRef.current === seq) {
@@ -185,7 +192,7 @@ export default function ChatBox({ group }: { group: Group }) {
 
       const sortedMessages = [...groupMessages].sort(
         (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
       );
 
       for (let i = 0; i < sortedMessages.length; i++) {
@@ -197,12 +204,23 @@ export default function ChatBox({ group }: { group: Group }) {
           decryptedContentCacheRef.current.has(currentMsg.id)
         ) {
           decryptedContent = decryptedContentCacheRef.current.get(
-            currentMsg.id
+            currentMsg.id,
           )!;
         } else {
+          const senderDeviceKeys =
+            relevantDeviceKeys[currentMsg.sender_id] || [];
+          const senderDeviceKey = senderDeviceKeys.find(
+            (key) => key.deviceId === currentMsg.sender_device_id,
+          );
+          if (!senderDeviceKey?.signingPublicKey) {
+            decryptedContent = "[Signature Verification Failed]";
+            newCacheEntries.set(currentMsg.id, decryptedContent);
+            continue;
+          }
           const plaintext = await encryptionService.decryptStoredMessage(
             currentMsg,
-            devicePrivateKey
+            devicePrivateKey,
+            senderDeviceKey.signingPublicKey,
           );
 
           if (plaintext) {
@@ -210,12 +228,12 @@ export default function ChatBox({ group }: { group: Group }) {
               case "image":
                 try {
                   decryptedContent = JSON.parse(
-                    plaintext
+                    plaintext,
                   ) as ImageMessageContent;
                 } catch (e) {
                   console.error(
                     `Failed to parse image JSON for message ${currentMsg.id}:`,
-                    e
+                    e,
                   );
                   decryptedContent = "[Invalid Image Data]";
                 }
@@ -274,7 +292,7 @@ export default function ChatBox({ group }: { group: Group }) {
           });
         } else if (decryptedContent) {
           const optimisticMessage = optimisticMessages.find(
-            (o) => o.id === currentMsg.id && o.type === "message_image"
+            (o) => o.id === currentMsg.id && o.type === "message_image",
           );
 
           const imageContent = decryptedContent as ImageMessageContent;
@@ -309,7 +327,7 @@ export default function ChatBox({ group }: { group: Group }) {
       const realIds = new Set(
         finalDisplayableItems
           .filter((i) => i.type !== "date_separator")
-          .map((i) => i.id)
+          .map((i) => i.id),
       );
 
       const filteredOptimistic = optimisticMessages
@@ -326,9 +344,14 @@ export default function ChatBox({ group }: { group: Group }) {
 
       // Merge real and optimistic messages, then sort everything together
       // This prevents optimistic messages from being stuck at the end
-      const allDisplayableItems = [...finalDisplayableItems, ...filteredOptimistic].sort((a, b) => {
+      const allDisplayableItems = [
+        ...finalDisplayableItems,
+        ...filteredOptimistic,
+      ].sort((a, b) => {
         // Helper to check if item is a message (not a date separator)
-        const isMessage = (item: DisplayableItem): item is TextDisplayableItem | ImageDisplayableItem =>
+        const isMessage = (
+          item: DisplayableItem,
+        ): item is TextDisplayableItem | ImageDisplayableItem =>
           item.type === "message_text" || item.type === "message_image";
 
         // 0. Pin-to-bottom items (uploading images) always go to the end
@@ -348,8 +371,12 @@ export default function ChatBox({ group }: { group: Group }) {
         // 2. Secondary: clientSeq for same-timestamp messages
         // Note: clientSeq (camelCase) = in-memory optimistic messages
         //       client_seq (snake_case) = persisted messages from DB
-        const aSeq = isMessage(a) ? (a.clientSeq ?? a.client_seq ?? null) : null;
-        const bSeq = isMessage(b) ? (b.clientSeq ?? b.client_seq ?? null) : null;
+        const aSeq = isMessage(a)
+          ? (a.clientSeq ?? a.client_seq ?? null)
+          : null;
+        const bSeq = isMessage(b)
+          ? (b.clientSeq ?? b.client_seq ?? null)
+          : null;
 
         if (aSeq !== null && bSeq !== null) return aSeq - bSeq;
         if (aSeq !== null) return 1; // a is newer
@@ -362,15 +389,21 @@ export default function ChatBox({ group }: { group: Group }) {
       const nextDisplayable = allDisplayableItems.reverse();
 
       // Debug: Log when message counts change significantly
-      if (DEBUG.MESSAGE_FLOW && Math.abs(nextDisplayable.length - displayableLengthRef.current) > 5) {
-        console.warn(`📊 [DISPLAY] Count changed from ${displayableLengthRef.current} to ${nextDisplayable.length}`, {
-          rawGroupMsgs: groupMessages.length,
-          decryptedReal: finalDisplayableItems.length,
-          optimisticTotal: optimisticMessages.length,
-          optimisticKept: filteredOptimistic.length,
-          realIdCount: realIds.size,
-          seq,
-        });
+      if (
+        DEBUG.MESSAGE_FLOW &&
+        Math.abs(nextDisplayable.length - displayableLengthRef.current) > 5
+      ) {
+        console.warn(
+          `📊 [DISPLAY] Count changed from ${displayableLengthRef.current} to ${nextDisplayable.length}`,
+          {
+            rawGroupMsgs: groupMessages.length,
+            decryptedReal: finalDisplayableItems.length,
+            optimisticTotal: optimisticMessages.length,
+            optimisticKept: filteredOptimistic.length,
+            realIdCount: realIds.size,
+            seq,
+          },
+        );
       }
 
       // Smart ordering anomaly detection - only logs when issues detected
@@ -380,7 +413,10 @@ export default function ChatBox({ group }: { group: Group }) {
           const curr = nextDisplayable[i];
 
           // Skip date separators
-          if (prev.type === 'date_separator' || curr.type === 'date_separator') {
+          if (
+            prev.type === "date_separator" ||
+            curr.type === "date_separator"
+          ) {
             continue;
           }
 
@@ -389,7 +425,7 @@ export default function ChatBox({ group }: { group: Group }) {
 
           // Since reversed, prev should be newer than curr
           if (prevTime < currTime) {
-            console.warn('[ORDER ANOMALY] Timestamp mismatch', {
+            console.warn("[ORDER ANOMALY] Timestamp mismatch", {
               prevId: prev.id.slice(0, 8),
               prevTime: prev.timestamp,
               prevSeq: (prev as any).clientSeq,
@@ -424,6 +460,7 @@ export default function ChatBox({ group }: { group: Group }) {
     user?.id,
     optimisticMessages,
     group.id,
+    relevantDeviceKeys,
   ]);
 
   const flatListProps = useMemo(
@@ -439,7 +476,7 @@ export default function ChatBox({ group }: { group: Group }) {
       removeClippedSubviews: Platform.OS === "android",
       updateCellsBatchingPeriod: 100,
     }),
-    []
+    [],
   );
 
   const contentContainerStyle = useMemo(
@@ -449,7 +486,7 @@ export default function ChatBox({ group }: { group: Group }) {
       paddingHorizontal: 10,
       paddingVertical: 10,
     }),
-    []
+    [],
   );
 
   const triggerHapticFeedback = useCallback(() => {
@@ -488,10 +525,10 @@ export default function ChatBox({ group }: { group: Group }) {
             });
           }
         },
-        Platform.OS === "ios" ? 70 : 100
+        Platform.OS === "ios" ? 70 : 100,
       );
     },
-    [displayableMessages.length]
+    [displayableMessages.length],
   );
 
   useEffect(() => {
@@ -546,7 +583,7 @@ export default function ChatBox({ group }: { group: Group }) {
         </View>
       </View>
     ),
-    []
+    [],
   );
 
   const renderItem = useCallback(
@@ -594,7 +631,7 @@ export default function ChatBox({ group }: { group: Group }) {
           return null;
       }
     },
-    [displayableMessages, isActivelySwipping, swipeX, renderDateSeparator]
+    [displayableMessages, isActivelySwipping, swipeX, renderDateSeparator],
   );
 
   return (

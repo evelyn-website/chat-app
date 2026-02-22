@@ -73,6 +73,8 @@ type DeviceKey struct {
 	LastSeenAt           pgtype.Timestamp `json:"last_seen_at"`
 	ExpoPushToken        pgtype.Text      `json:"expo_push_token"`
 	NotificationsEnabled bool             `json:"notifications_enabled"`
+	// Ed25519 public key bytes for message signature verification
+	SigningPublicKey []byte `json:"signing_public_key"`
 }
 
 type Group struct {
@@ -119,6 +121,10 @@ type Message struct {
 	// JSON array of per-recipient sealed symmetric keys. Each element: {deviceId, ephPubKey, keyNonce, sealedKey}
 	KeyEnvelopes []byte      `json:"key_envelopes"`
 	MessageType  MessageType `json:"message_type"`
+	// Device identifier that signed the message payload
+	SenderDeviceIdentifier pgtype.Text `json:"sender_device_identifier"`
+	// Ed25519 detached signature over canonical message payload
+	Signature []byte `json:"signature"`
 }
 
 type PushReceipt struct {

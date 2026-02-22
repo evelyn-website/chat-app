@@ -23,6 +23,7 @@ import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
 import http from "@/util/custom-axios";
 import { get } from "@/util/custom-store";
+import { getOrGenerateDeviceIdentifier } from "@/services/deviceService";
 
 interface WebSocketContextType {
   sendMessage: (packet: RawMessage) => void;
@@ -159,6 +160,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return new Promise(async (resolve, reject) => {
       const token = await get("jwt");
+      const deviceIdentifier = await getOrGenerateDeviceIdentifier();
       if (!token) {
         if (!promiseSettled) {
           promiseSettled = true;
@@ -259,7 +261,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         socket.onopen = () => {
           if (socketRef.current !== socket) return;
           try {
-            socket.send(JSON.stringify({ type: "auth", token: token }));
+            socket.send(
+              JSON.stringify({
+                type: "auth",
+                token: token,
+                device_identifier: deviceIdentifier,
+              }),
+            );
           } catch {
             safeReject(new Error("Failed to send authentication message."));
             socket.close(CLOSE_CODE_AUTH_FAILED, "Failed to send auth");

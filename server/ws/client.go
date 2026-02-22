@@ -15,14 +15,15 @@ import (
 )
 
 type Client struct {
-	conn    *websocket.Conn
-	Message chan *RawMessageE2EE
-	Events  chan *ClientEvent
-	Groups  map[uuid.UUID]bool
-	User    *db.GetUserByIdRow `json:"user"`
-	mutex   sync.RWMutex
-	ctx     context.Context
-	cancel  context.CancelFunc
+	conn             *websocket.Conn
+	Message          chan *RawMessageE2EE
+	Events           chan *ClientEvent
+	Groups           map[uuid.UUID]bool
+	DeviceIdentifier string
+	User             *db.GetUserByIdRow `json:"user"`
+	mutex            sync.RWMutex
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 const (
@@ -32,16 +33,17 @@ const (
 	maxMessageSize = 16 * 1024
 )
 
-func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow) *Client {
+func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow, deviceIdentifier string) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
-		conn:    conn,
-		Message: make(chan *RawMessageE2EE, 10),
-		Events:  make(chan *ClientEvent, 20),
-		Groups:  make(map[uuid.UUID]bool),
-		User:    user,
-		ctx:     ctx,
-		cancel:  cancel,
+		conn:             conn,
+		Message:          make(chan *RawMessageE2EE, 10),
+		Events:           make(chan *ClientEvent, 20),
+		Groups:           make(map[uuid.UUID]bool),
+		DeviceIdentifier: deviceIdentifier,
+		User:             user,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 
@@ -166,9 +168,11 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 		hubMessage := &RawMessageE2EE{
 			ID:             clientMsg.ID,
 			GroupID:        clientMsg.GroupID,
+			SenderDeviceID: c.DeviceIdentifier,
 			MessageType:    clientMsg.MessageType,
 			MsgNonce:       clientMsg.MsgNonce,
 			Ciphertext:     clientMsg.Ciphertext,
+			Signature:      clientMsg.Signature,
 			Envelopes:      clientMsg.Envelopes,
 			SenderID:       c.User.ID,
 			SenderUsername: c.User.Username,

@@ -16,10 +16,12 @@ type SignupRequest struct {
 	Password         string `json:"password" binding:"required,min=8,max=72"`
 	DeviceIdentifier string `json:"device_identifier" binding:"required"`
 	PublicKey        string `json:"public_key" binding:"required"`
+	SigningPublicKey string `json:"signing_public_key" binding:"required"`
 }
 type LoginRequest struct {
 	Email            string `json:"email" binding:"required,email"`
 	Password         string `json:"password" binding:"required"`
 	DeviceIdentifier string `json:"device_identifier" binding:"required"`
 	PublicKey        string `json:"public_key" binding:"required"`
+	SigningPublicKey string `json:"signing_public_key" binding:"required"`
 }

@@ -37,10 +37,16 @@ func (h *AuthHandler) registerOrUpdateDeviceKey(
 	userID uuid.UUID,
 	deviceIdentifier string,
 	base64PublicKey string,
+	base64SigningPublicKey string,
 ) error {
 	publicKeyBytes, err := base64.StdEncoding.DecodeString(base64PublicKey)
 	if err != nil {
 		log.Printf("Error decoding public key for user %s, device %s: %v", userID, deviceIdentifier, err)
+		return err
+	}
+	signingPublicKeyBytes, err := base64.StdEncoding.DecodeString(base64SigningPublicKey)
+	if err != nil {
+		log.Printf("Error decoding signing public key for user %s, device %s: %v", userID, deviceIdentifier, err)
 		return err
 	}
 
@@ -48,6 +54,7 @@ func (h *AuthHandler) registerOrUpdateDeviceKey(
 		UserID:           userID,
 		DeviceIdentifier: deviceIdentifier,
 		PublicKey:        publicKeyBytes,
+		SigningPublicKey: signingPublicKeyBytes,
 	})
 	if err != nil {
 		log.Printf("Error registering/updating device key for user %s, device %s: %v", userID, deviceIdentifier, err)
@@ -84,7 +91,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	if err := h.registerOrUpdateDeviceKey(ctx, user.ID, req.DeviceIdentifier, req.PublicKey); err != nil {
+	if err := h.registerOrUpdateDeviceKey(ctx, user.ID, req.DeviceIdentifier, req.PublicKey, req.SigningPublicKey); err != nil {
 		log.Printf("Warning: User %s signed up, but device key registration failed: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Signup succeeded but failed to register device."})
 		return
@@ -141,7 +148,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if err := h.registerOrUpdateDeviceKey(ctx, user.ID, req.DeviceIdentifier, req.PublicKey); err != nil {
+	if err := h.registerOrUpdateDeviceKey(ctx, user.ID, req.DeviceIdentifier, req.PublicKey, req.SigningPublicKey); err != nil {
 		log.Printf("Warning: User %s logged in, but device key registration/update failed: %v", user.ID, err)
 	}
 

@@ -15,6 +15,7 @@ import (
 type ClientDeviceKeyInfo struct {
 	DeviceIdentifier string `json:"device_identifier"`
 	PublicKey        string `json:"public_key"`
+	SigningPublicKey string `json:"signing_public_key"`
 }
 type UserWithDeviceKeys struct {
 	UserID     uuid.UUID             `json:"user_id"`

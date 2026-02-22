@@ -35,6 +35,9 @@ const SECRETKEYBYTES = 32;
 const SEEDBYTES = 32;
 const NONCEBYTES = 24;
 const BOXSEALBYTES = 48;
+const SIGN_PUBLICKEYBYTES = 32;
+const SIGN_SECRETKEYBYTES = 64;
+const SIGN_BYTES = 64;
 
 let keyCounter = 0;
 let randomBytesCounter = 0;
@@ -46,6 +49,18 @@ module.exports = {
     const seed = `keypair_${keyCounter}`;
     const publicKey = createDeterministicArray(seed + '_pub', PUBLICKEYBYTES);
     const privateKey = createDeterministicArray(seed + '_sec', SECRETKEYBYTES);
+    return {
+      publicKey,
+      privateKey,
+    };
+  }),
+
+  // Signing key generation (Ed25519-style)
+  crypto_sign_keypair: jest.fn(() => {
+    keyCounter++;
+    const seed = `sign_keypair_${keyCounter}`;
+    const publicKey = createDeterministicArray(seed + '_pub', SIGN_PUBLICKEYBYTES);
+    const privateKey = createDeterministicArray(seed + '_sec', SIGN_SECRETKEYBYTES);
     return {
       publicKey,
       privateKey,
@@ -204,6 +219,36 @@ module.exports = {
     return message;
   }),
 
+  // Detached signatures
+  crypto_sign_detached: jest.fn((message, privateKey) => {
+    if (!(message instanceof Uint8Array)) {
+      throw new Error('Message must be Uint8Array');
+    }
+    if (!(privateKey instanceof Uint8Array)) {
+      throw new Error('Private key must be Uint8Array');
+    }
+    const seed = arrayToBase64(message) + '_sig';
+    return createDeterministicArray(seed, SIGN_BYTES);
+  }),
+
+  crypto_sign_verify_detached: jest.fn((signature, message, publicKey) => {
+    if (!(signature instanceof Uint8Array)) {
+      throw new Error('Signature must be Uint8Array');
+    }
+    if (!(message instanceof Uint8Array)) {
+      throw new Error('Message must be Uint8Array');
+    }
+    if (!(publicKey instanceof Uint8Array)) {
+      throw new Error('Public key must be Uint8Array');
+    }
+    const expected = createDeterministicArray(arrayToBase64(message) + '_sig', SIGN_BYTES);
+    if (expected.length !== signature.length) return false;
+    for (let i = 0; i < expected.length; i++) {
+      if (expected[i] !== signature[i]) return false;
+    }
+    return true;
+  }),
+
   // Convert Uint8Array to string
   to_string: jest.fn((arr) => {
     if (!(arr instanceof Uint8Array)) {
@@ -230,6 +275,9 @@ module.exports = {
   crypto_box_NONCEBYTES: 24,
   crypto_box_PUBLICKEYBYTES: 32,
   crypto_box_SECRETKEYBYTES: 32,
+  crypto_sign_PUBLICKEYBYTES: SIGN_PUBLICKEYBYTES,
+  crypto_sign_SECRETKEYBYTES: SIGN_SECRETKEYBYTES,
+  crypto_sign_BYTES: SIGN_BYTES,
 
   // Ready promise
   ready: Promise.resolve(),

@@ -54,7 +54,7 @@ func (q *Queries) DeleteDeviceKey(ctx context.Context, arg DeleteDeviceKeyParams
 }
 
 const getDeviceKeyByIdentifier = `-- name: GetDeviceKeyByIdentifier :one
-SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled FROM device_keys
+SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled, signing_public_key FROM device_keys
 WHERE user_id = $1 AND device_identifier = $2
 LIMIT 1
 `
@@ -76,12 +76,13 @@ func (q *Queries) GetDeviceKeyByIdentifier(ctx context.Context, arg GetDeviceKey
 		&i.LastSeenAt,
 		&i.ExpoPushToken,
 		&i.NotificationsEnabled,
+		&i.SigningPublicKey,
 	)
 	return i, err
 }
 
 const getDeviceKeysForUser = `-- name: GetDeviceKeysForUser :many
-SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled FROM device_keys
+SELECT id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled, signing_public_key FROM device_keys
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -104,6 +105,7 @@ func (q *Queries) GetDeviceKeysForUser(ctx context.Context, userID uuid.UUID) ([
 			&i.LastSeenAt,
 			&i.ExpoPushToken,
 			&i.NotificationsEnabled,
+			&i.SigningPublicKey,
 		); err != nil {
 			return nil, err
 		}
@@ -154,24 +156,32 @@ INSERT INTO device_keys (
     user_id,
     device_identifier,
     public_key,
+    signing_public_key,
     last_seen_at
 ) VALUES (
-    $1, $2, $3, now()
+    $1, $2, $3, $4, now()
 )
 ON CONFLICT (user_id, device_identifier) DO UPDATE SET
     public_key = EXCLUDED.public_key,
+    signing_public_key = EXCLUDED.signing_public_key,
     last_seen_at = now()
-RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled
+RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled, signing_public_key
 `
 
 type RegisterDeviceKeyParams struct {
 	UserID           uuid.UUID `json:"user_id"`
 	DeviceIdentifier string    `json:"device_identifier"`
 	PublicKey        []byte    `json:"public_key"`
+	SigningPublicKey []byte    `json:"signing_public_key"`
 }
 
 func (q *Queries) RegisterDeviceKey(ctx context.Context, arg RegisterDeviceKeyParams) (DeviceKey, error) {
-	row := q.db.QueryRow(ctx, registerDeviceKey, arg.UserID, arg.DeviceIdentifier, arg.PublicKey)
+	row := q.db.QueryRow(ctx, registerDeviceKey,
+		arg.UserID,
+		arg.DeviceIdentifier,
+		arg.PublicKey,
+		arg.SigningPublicKey,
+	)
 	var i DeviceKey
 	err := row.Scan(
 		&i.ID,
@@ -182,6 +192,7 @@ func (q *Queries) RegisterDeviceKey(ctx context.Context, arg RegisterDeviceKeyPa
 		&i.LastSeenAt,
 		&i.ExpoPushToken,
 		&i.NotificationsEnabled,
+		&i.SigningPublicKey,
 	)
 	return i, err
 }
@@ -206,7 +217,7 @@ const updateDevicePushToken = `-- name: UpdateDevicePushToken :one
 UPDATE device_keys
 SET expo_push_token = $3
 WHERE user_id = $1 AND device_identifier = $2
-RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled
+RETURNING id, user_id, device_identifier, public_key, created_at, last_seen_at, expo_push_token, notifications_enabled, signing_public_key
 `
 
 type UpdateDevicePushTokenParams struct {
@@ -227,6 +238,7 @@ func (q *Queries) UpdateDevicePushToken(ctx context.Context, arg UpdateDevicePus
 		&i.LastSeenAt,
 		&i.ExpoPushToken,
 		&i.NotificationsEnabled,
+		&i.SigningPublicKey,
 	)
 	return i, err
 }

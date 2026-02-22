@@ -74,7 +74,8 @@ SELECT
     jsonb_agg(
         jsonb_build_object(
             'device_identifier', dk.device_identifier,
-            'public_key', encode(dk.public_key, 'base64')
+            'public_key', encode(dk.public_key, 'base64'),
+            'signing_public_key', encode(dk.signing_public_key, 'base64')
         ) ORDER BY dk.created_at DESC
     ) AS device_keys
 FROM
