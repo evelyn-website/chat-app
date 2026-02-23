@@ -216,6 +216,23 @@ describe('encryptionService', () => {
         (sodium.crypto_sign_verify_detached as jest.Mock).mockReturnValue(true);
       });
 
+      it('should return null when signature verification fails', () => {
+        (sodium.crypto_sign_verify_detached as jest.Mock).mockReturnValueOnce(
+          false
+        );
+
+        const result = processAndDecodeIncomingMessage(
+          mockRawMessage,
+          'device-1',
+          'sender-789',
+          'msg-123',
+          '2024-01-01T00:00:00Z',
+          mockSenderSigningPublicKey
+        );
+
+        expect(result).toBeNull();
+      });
+
       it('should process message with matching envelope', () => {
         const result = processAndDecodeIncomingMessage(
           mockRawMessage,

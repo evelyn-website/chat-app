@@ -420,7 +420,9 @@ type EnvelopeLike = RawMessage["envelopes"][number];
 
 const buildCanonicalEnvelopes = (envelopes: EnvelopeLike[]): string => {
   const normalized = [...envelopes]
-    .sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+    .sort((a, b) =>
+      a.deviceId < b.deviceId ? -1 : a.deviceId > b.deviceId ? 1 : 0
+    )
     .map((env) => ({
       deviceId: env.deviceId,
       ephPubKey: env.ephPubKey,

@@ -3,6 +3,7 @@ package auth
 import (
 	"chat-app-server/db"
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
 	"log"
@@ -50,8 +51,8 @@ func (h *AuthHandler) registerOrUpdateDeviceKey(
 		log.Printf("Error decoding signing public key for user %s, device %s: %v", userID, deviceIdentifier, err)
 		return err
 	}
-	if len(signingPublicKeyBytes) != 32 {
-		log.Printf("Invalid signing public key length for user %s, device %s: got %d bytes, expected 32", userID, deviceIdentifier, len(signingPublicKeyBytes))
+	if len(signingPublicKeyBytes) != ed25519.PublicKeySize {
+		log.Printf("Invalid signing public key length for user %s, device %s: got %d bytes, expected %d", userID, deviceIdentifier, len(signingPublicKeyBytes), ed25519.PublicKeySize)
 		return errors.New("invalid signing public key length")
 	}
 
@@ -154,7 +155,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if err := h.registerOrUpdateDeviceKey(ctx, user.ID, req.DeviceIdentifier, req.PublicKey, req.SigningPublicKey); err != nil {
-		log.Printf("Warning: User %s logged in, but device key registration/update failed: %v", user.ID, err)
+		log.Printf("Error: User %s login failed due to device key registration/update error: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed: could not register device key."})
+		return
 	}
 
 	claims := Claims{

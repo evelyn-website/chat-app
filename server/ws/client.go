@@ -25,6 +25,7 @@ type Client struct {
 	Events           chan *ClientEvent
 	Groups           map[uuid.UUID]bool
 	DeviceIdentifier string
+	SigningPublicKey ed25519.PublicKey
 	User             *db.GetUserByIdRow `json:"user"`
 	mutex            sync.RWMutex
 	ctx              context.Context
@@ -38,7 +39,7 @@ const (
 	maxMessageSize = 16 * 1024
 )
 
-func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow, deviceIdentifier string) *Client {
+func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow, deviceIdentifier string, signingPublicKey ed25519.PublicKey) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		conn:             conn,
@@ -46,6 +47,7 @@ func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow, deviceIdentifier s
 		Events:           make(chan *ClientEvent, 20),
 		Groups:           make(map[uuid.UUID]bool),
 		DeviceIdentifier: deviceIdentifier,
+		SigningPublicKey: signingPublicKey,
 		User:             user,
 		ctx:              ctx,
 		cancel:           cancel,
@@ -182,18 +184,9 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 				c.User.ID, c.User.Username, clientMsg.GroupID)
 			continue
 		}
-		deviceKey, err := queries.GetDeviceKeyByIdentifier(c.ctx, db.GetDeviceKeyByIdentifierParams{
-			UserID:           c.User.ID,
-			DeviceIdentifier: c.DeviceIdentifier,
-		})
-		if err != nil {
-			log.Printf("Client %d (%s): Failed to fetch signing key for device %s: %v. Discarding.",
-				c.User.ID, c.User.Username, c.DeviceIdentifier, err)
-			continue
-		}
-		if len(deviceKey.SigningPublicKey) != ed25519.PublicKeySize {
-			log.Printf("Client %d (%s): Invalid signing public key length for device %s: got %d, expected %d. Discarding.",
-				c.User.ID, c.User.Username, c.DeviceIdentifier, len(deviceKey.SigningPublicKey), ed25519.PublicKeySize)
+		if len(c.SigningPublicKey) != ed25519.PublicKeySize {
+			log.Printf("Client %d (%s): Missing/invalid signing public key in session for device %s. Discarding message %s.",
+				c.User.ID, c.User.Username, c.DeviceIdentifier, clientMsg.ID)
 			continue
 		}
 		canonicalPayload, err := buildCanonicalSignedPayload(clientMsg, c.User.ID, c.DeviceIdentifier)
@@ -202,7 +195,7 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 				c.User.ID, c.User.Username, clientMsg.ID, err)
 			continue
 		}
-		if !ed25519.Verify(deviceKey.SigningPublicKey, []byte(canonicalPayload), signatureBytes) {
+		if !ed25519.Verify(c.SigningPublicKey, []byte(canonicalPayload), signatureBytes) {
 			log.Printf("Client %d (%s): Signature verification failed for message %s in group %s. Discarding.",
 				c.User.ID, c.User.Username, clientMsg.ID, clientMsg.GroupID)
 			continue

@@ -236,6 +236,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
           return;
         }
 
+        // Reset auth status for each socket attempt so handshake responses from
+        // a fresh connection are evaluated in the pre-auth branch.
+        isAuthenticated = false;
+
         if (socketRef.current) {
           const oldSocket = socketRef.current;
           socketRef.current = null;

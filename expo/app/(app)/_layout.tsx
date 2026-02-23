@@ -186,10 +186,10 @@ const AppLayout = () => {
   const prevWsConnected = useRef<boolean | null>(null);
   useEffect(() => {
     if (prevWsConnected.current === false && wsConnected && user && deviceId) {
-      void loadHistoricalMessages();
+      void runCatchUpSync();
     }
     prevWsConnected.current = wsConnected;
-  }, [wsConnected, user, deviceId, loadHistoricalMessages]);
+  }, [wsConnected, user, deviceId, runCatchUpSync]);
 
   if (isLoading) {
     return (

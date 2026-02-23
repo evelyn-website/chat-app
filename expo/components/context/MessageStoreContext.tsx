@@ -216,6 +216,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [relevantDeviceKeys]);
 
   const isSyncingHistoricalMessagesRef = useRef(false);
+  const lastRecoverySyncAttemptRef = useRef(0);
 
   const loadHistoricalMessages = useCallback(
     async (deviceId?: string) => {
@@ -357,25 +358,35 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         });
       }
 
-      const baseProcessed =
-        (() => {
-          const senderSigningPublicKey = (
-            relevantDeviceKeysRef.current[rawMsg.sender_id] || []
-          ).find((key) => key.deviceId === rawMsg.sender_device_id)
-            ?.signingPublicKey;
-          if (!senderSigningPublicKey) {
-            return null;
+      const senderSigningPublicKey = (
+        relevantDeviceKeysRef.current[rawMsg.sender_id] || []
+      ).find((key) => key.deviceId === rawMsg.sender_device_id)
+        ?.signingPublicKey;
+      if (!senderSigningPublicKey) {
+        console.warn(
+          "handleNewRawMessage: Missing sender signing key; scheduling historical recovery sync.",
+          {
+            messageId: rawMsg.id,
+            senderId: rawMsg.sender_id,
+            senderDeviceId: rawMsg.sender_device_id,
           }
-          return encryptionService.processAndDecodeIncomingMessage(
-            rawMsg,
-            globalDeviceId,
-            rawMsg.sender_id,
-            rawMsg.id,
-            rawMsg.timestamp,
-            senderSigningPublicKey,
-            rawMsg.sender_username
-          );
-        })();
+        );
+        const now = Date.now();
+        if (now - lastRecoverySyncAttemptRef.current > 2000) {
+          lastRecoverySyncAttemptRef.current = now;
+          void loadHistoricalMessages();
+        }
+        return;
+      }
+      const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
+        rawMsg,
+        globalDeviceId,
+        rawMsg.sender_id,
+        rawMsg.id,
+        rawMsg.timestamp,
+        senderSigningPublicKey,
+        rawMsg.sender_username
+      );
 
       if (baseProcessed) {
         const processedMessage: DbMessage = {
@@ -414,6 +425,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     globalDeviceId,
     refreshGroups,
     updateOptimisticMessage,
+    loadHistoricalMessages,
   ]);
 
   const getMessagesForGroup = useCallback(
