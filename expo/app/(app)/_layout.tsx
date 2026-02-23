@@ -127,6 +127,7 @@ const AppLayout = () => {
   const groupsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const usersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deviceKeysIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const catchUpSyncInFlightRef = useRef(false);
 
   const clearAllIntervals = useCallback(() => {
     if (groupsIntervalRef.current) {
@@ -151,10 +152,20 @@ const AppLayout = () => {
   }, [clearAllIntervals, fetchGroups, fetchUsers, fetchDeviceKeys]);
 
   const runCatchUpSync = useCallback(async () => {
-    // Load signing keys first so strict signature verification can process history.
-    await fetchDeviceKeys();
-    await loadHistoricalMessages();
-    await Promise.all([fetchGroups(), fetchUsers()]);
+    if (catchUpSyncInFlightRef.current) {
+      return;
+    }
+    catchUpSyncInFlightRef.current = true;
+    try {
+      // Load signing keys first so strict signature verification can process history.
+      await fetchDeviceKeys();
+      await loadHistoricalMessages();
+      await Promise.all([fetchGroups(), fetchUsers()]);
+    } catch (error) {
+      console.error("runCatchUpSync: unexpected sync error", error);
+    } finally {
+      catchUpSyncInFlightRef.current = false;
+    }
   }, [fetchGroups, fetchUsers, loadHistoricalMessages, fetchDeviceKeys]);
 
   useEffect(() => {

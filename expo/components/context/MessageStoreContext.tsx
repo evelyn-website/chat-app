@@ -349,15 +349,6 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         (m) => m.id === rawMsg.id
       );
 
-      // Update optimistic message with server timestamp and unpin from bottom
-      // This allows it to sort correctly while waiting for decryption
-      if (optimisticMsg) {
-        updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
-          timestamp: rawMsg.timestamp,
-          pinToBottom: false,
-        });
-      }
-
       const senderSigningPublicKey = (
         relevantDeviceKeysRef.current[rawMsg.sender_id] || []
       ).find((key) => key.deviceId === rawMsg.sender_device_id)
@@ -389,6 +380,14 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       );
 
       if (baseProcessed) {
+        // Only unpin/update optimistic message after verification/decode succeeds.
+        if (optimisticMsg) {
+          updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
+            timestamp: rawMsg.timestamp,
+            pinToBottom: false,
+          });
+        }
+
         const processedMessage: DbMessage = {
           ...baseProcessed,
           client_seq: optimisticMsg?.clientSeq ?? null,
