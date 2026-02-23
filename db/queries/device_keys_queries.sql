@@ -3,12 +3,14 @@ INSERT INTO device_keys (
     user_id,
     device_identifier,
     public_key,
+    signing_public_key,
     last_seen_at
 ) VALUES (
-    $1, $2, $3, now()
+    $1, $2, $3, $4, now()
 )
 ON CONFLICT (user_id, device_identifier) DO UPDATE SET
     public_key = EXCLUDED.public_key,
+    signing_public_key = EXCLUDED.signing_public_key,
     last_seen_at = now()
 RETURNING *;
 

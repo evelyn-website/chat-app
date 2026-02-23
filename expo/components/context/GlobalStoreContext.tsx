@@ -14,12 +14,14 @@ import { CanceledError } from "axios";
 interface DeviceKey {
   deviceId: string;
   publicKey: Uint8Array;
+  signingPublicKey: Uint8Array;
 }
 
 type RelevantDeviceKeysMap = Record<string, DeviceKey[]>;
 interface ServerDeviceKeyInfo {
   device_identifier: string;
   public_key: string;
+  signing_public_key: string;
 }
 
 interface ServerUserWithDeviceKeys {
@@ -164,6 +166,9 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
           (keyInfo) => ({
             deviceId: keyInfo.device_identifier,
             publicKey: encryptionService.base64ToUint8Array(keyInfo.public_key),
+            signingPublicKey: encryptionService.base64ToUint8Array(
+              keyInfo.signing_public_key
+            ),
           })
         );
       }

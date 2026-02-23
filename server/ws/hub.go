@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -580,6 +581,11 @@ func (h *Hub) Run() {
 				log.Printf("Error decoding msgNonce base64 for message in group %s: %v", message.GroupID, err)
 				continue
 			}
+			signatureBytes, err := base64.StdEncoding.DecodeString(message.Signature)
+			if err != nil {
+				log.Printf("Error decoding signature base64 for message in group %s: %v", message.GroupID, err)
+				continue
+			}
 
 			keyEnvelopesJSON, err := json.Marshal(message.Envelopes)
 			if err != nil {
@@ -595,6 +601,11 @@ func (h *Hub) Run() {
 				MessageType:  message.MessageType,
 				MsgNonce:     nonceBytes,
 				KeyEnvelopes: keyEnvelopesJSON,
+				SenderDeviceIdentifier: pgtype.Text{
+					String: message.SenderDeviceID,
+					Valid:  message.SenderDeviceID != "",
+				},
+				Signature: signatureBytes,
 			}
 
 			savedMessage, err := h.db.InsertMessage(h.ctx, insertParams)

@@ -18,6 +18,7 @@ import { processImage } from "@/services/imageService";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
 import { OptimisticMessageItem } from "@/components/ChatBox/types";
 import { v4 } from "uuid";
+import * as deviceService from "@/services/deviceService";
 
 interface UseSendImageReturn {
   sendImage: (
@@ -174,13 +175,20 @@ export const useSendImage = (): UseSendImageReturn => {
           { width: imageAsset.width, height: imageAsset.height },
           blurhash
         );
+        const { deviceId, signingPrivateKey } =
+          await deviceService.ensureDeviceIdentity();
 
         const rawMessagePayload = await encryptAndPrepareMessageForSending(
           id,
           plaintextPayload,
           groupId,
           recipientDevicePublicKeys,
-          MessageType.IMAGE
+          MessageType.IMAGE,
+          {
+            senderId: currentUser.id,
+            senderDeviceId: deviceId,
+            senderSigningPrivateKey: signingPrivateKey,
+          }
         );
         if (!rawMessagePayload) {
           throw new Error("Failed to encrypt the final image message payload.");

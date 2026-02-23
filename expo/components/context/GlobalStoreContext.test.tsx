@@ -13,6 +13,13 @@ jest.mock('@/services/encryptionService');
 
 describe('GlobalStoreContext', () => {
   let mockStore: jest.Mocked<Store>;
+  const buildMockUser = (): User => ({
+    id: 'user-123',
+    username: 'testuser',
+    email: 'test@example.com',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -116,11 +123,7 @@ describe('GlobalStoreContext', () => {
     it('should set user', () => {
       const { result } = renderHook(() => useGlobalStore(), { wrapper });
 
-      const mockUser: User = {
-        id: 'user-123',
-        username: 'testuser',
-        email: 'test@example.com',
-      };
+      const mockUser: User = buildMockUser();
 
       act(() => {
         result.current.setUser(mockUser);
@@ -132,11 +135,7 @@ describe('GlobalStoreContext', () => {
     it('should set user to undefined', () => {
       const { result } = renderHook(() => useGlobalStore(), { wrapper });
 
-      const mockUser: User = {
-        id: 'user-123',
-        username: 'testuser',
-        email: 'test@example.com',
-      };
+      const mockUser: User = buildMockUser();
 
       act(() => {
         result.current.setUser(mockUser);
@@ -232,11 +231,7 @@ describe('GlobalStoreContext', () => {
   });
 
   describe('loadRelevantDeviceKeys', () => {
-    const mockUser: User = {
-      id: 'user-123',
-      username: 'testuser',
-      email: 'test@example.com',
-    };
+    const mockUser: User = buildMockUser();
 
     const mockServerResponse = [
       {
@@ -245,10 +240,12 @@ describe('GlobalStoreContext', () => {
           {
             device_identifier: 'device-1',
             public_key: Buffer.from(new Uint8Array(32).fill(1)).toString('base64'),
+            signing_public_key: Buffer.from(new Uint8Array(32).fill(11)).toString('base64'),
           },
           {
             device_identifier: 'device-2',
             public_key: Buffer.from(new Uint8Array(32).fill(2)).toString('base64'),
+            signing_public_key: Buffer.from(new Uint8Array(32).fill(12)).toString('base64'),
           },
         ],
       },
@@ -258,6 +255,7 @@ describe('GlobalStoreContext', () => {
           {
             device_identifier: 'device-3',
             public_key: Buffer.from(new Uint8Array(32).fill(3)).toString('base64'),
+            signing_public_key: Buffer.from(new Uint8Array(32).fill(13)).toString('base64'),
           },
         ],
       },
@@ -323,9 +321,12 @@ describe('GlobalStoreContext', () => {
         await result.current.loadRelevantDeviceKeys();
       });
 
-      expect(encryptionService.base64ToUint8Array).toHaveBeenCalledTimes(3);
+      expect(encryptionService.base64ToUint8Array).toHaveBeenCalledTimes(6);
       expect(encryptionService.base64ToUint8Array).toHaveBeenCalledWith(
         mockServerResponse[0].device_keys[0].public_key
+      );
+      expect(encryptionService.base64ToUint8Array).toHaveBeenCalledWith(
+        mockServerResponse[0].device_keys[0].signing_public_key
       );
     });
 
@@ -443,11 +444,7 @@ describe('GlobalStoreContext', () => {
   });
 
   describe('getDeviceKeysForUser', () => {
-    const mockUser: User = {
-      id: 'user-123',
-      username: 'testuser',
-      email: 'test@example.com',
-    };
+    const mockUser: User = buildMockUser();
 
     it('should return device keys for user after loading', async () => {
       const { result } = renderHook(() => useGlobalStore(), { wrapper });
@@ -459,10 +456,12 @@ describe('GlobalStoreContext', () => {
             {
               device_identifier: 'device-1',
               public_key: Buffer.from(new Uint8Array(32).fill(1)).toString('base64'),
+              signing_public_key: Buffer.from(new Uint8Array(32).fill(11)).toString('base64'),
             },
             {
               device_identifier: 'device-2',
               public_key: Buffer.from(new Uint8Array(32).fill(2)).toString('base64'),
+              signing_public_key: Buffer.from(new Uint8Array(32).fill(12)).toString('base64'),
             },
           ],
         },
@@ -548,7 +547,7 @@ describe('GlobalStoreContext', () => {
 
       const firstStore = result.current.store;
 
-      rerender();
+      rerender({});
 
       const secondStore = result.current.store;
 

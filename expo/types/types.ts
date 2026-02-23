@@ -15,6 +15,7 @@ export type User = {
 export interface RecipientDevicePublicKey {
   deviceId: string;
   publicKey: Uint8Array;
+  signingPublicKey: Uint8Array;
 }
 
 export type GroupAdminMap = Record<string, boolean>;
@@ -83,6 +84,7 @@ export type ClearImage = {
 export interface DbMessage {
   id: string;
   sender_id: string;
+  sender_device_id: string;
   sender_username?: string;
   group_id: string;
   timestamp: string;
@@ -94,6 +96,7 @@ export interface DbMessage {
   sender_ephemeral_public_key: Uint8Array;
   sym_key_encryption_nonce: Uint8Array;
   sealed_symmetric_key: Uint8Array;
+  signature: Uint8Array;
 }
 
 /**
@@ -111,17 +114,19 @@ export type RawMessage = {
   id: string;
   group_id: string;
   sender_id: string;
+  sender_device_id: string;
   sender_username?: string;
   timestamp: string;
   ciphertext: string; // The encrypted message content (Base64 encoded)
+  signature: string; // Detached Ed25519 signature (Base64 encoded)
   messageType: MessageType;
   msgNonce: string; // Nonce used for encrypting the message content (Base64 encoded)
-  envelopes: Array<{
+  envelopes: {
     deviceId: string; // Recipient's device identifier
     ephPubKey: string; // Sender's ephemeral public key for this box (Base64 encoded)
     keyNonce: string; // Nonce for this box (Base64 encoded)
     sealedKey: string; // The symKey sealed for this recipient (Base64 encoded)
-  }>;
+  }[];
 };
 
 export type ImageMessageContent = {

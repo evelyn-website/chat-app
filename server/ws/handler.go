@@ -5,6 +5,7 @@ import (
 	"chat-app-server/db"
 	"chat-app-server/util"
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -47,8 +48,9 @@ const (
 )
 
 type AuthMessage struct {
-	Type  string `json:"type"`
-	Token string `json:"token"`
+	Type             string `json:"type"`
+	Token            string `json:"token"`
+	DeviceIdentifier string `json:"device_identifier"`
 }
 
 type ServerResponseMessage struct {
@@ -73,6 +75,8 @@ func (h *Handler) EstablishConnection(c *gin.Context) {
 
 	var userID uuid.UUID
 	var user *db.GetUserByIdRow
+	var authMsg AuthMessage
+	var authSigningPublicKey ed25519.PublicKey
 	isAuthenticated := false
 
 	if err := conn.SetReadDeadline(time.Now().Add(authTimeout)); err != nil {
@@ -106,12 +110,37 @@ func (h *Handler) EstablishConnection(c *gin.Context) {
 	}
 
 	if messageType == websocket.TextMessage {
-		var authMsg AuthMessage
 		if err := json.Unmarshal(messageBytes, &authMsg); err == nil && authMsg.Type == "auth" {
+			if authMsg.DeviceIdentifier == "" {
+				response := ServerResponseMessage{Type: "auth_failure", Error: "Missing device_identifier in auth payload."}
+				conn.WriteJSON(response)
+				conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Missing device identifier"))
+				return
+			}
 			extractedUserID, validationErr := auth.ValidateToken(authMsg.Token)
 			if validationErr == nil {
 				fetchedUser, dbErr := h.db.GetUserById(requestCtx, extractedUserID)
 				if dbErr == nil {
+					deviceKey, keyErr := h.db.GetDeviceKeyByIdentifier(requestCtx, db.GetDeviceKeyByIdentifierParams{
+						UserID:           extractedUserID,
+						DeviceIdentifier: authMsg.DeviceIdentifier,
+					})
+					if keyErr != nil {
+						log.Printf("Auth failed: device key lookup failed for user %s and device %s: %v", extractedUserID.String(), authMsg.DeviceIdentifier, keyErr)
+						response := ServerResponseMessage{Type: "auth_failure", Error: "Device is not registered for this account."}
+						conn.WriteJSON(response)
+						conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Device not registered"))
+						return
+					}
+					if len(deviceKey.SigningPublicKey) != ed25519.PublicKeySize {
+						log.Printf("Auth failed: invalid signing key length for user %s device %s: got %d expected %d",
+							extractedUserID.String(), authMsg.DeviceIdentifier, len(deviceKey.SigningPublicKey), ed25519.PublicKeySize)
+						response := ServerResponseMessage{Type: "auth_failure", Error: "Invalid device signing key registration."}
+						conn.WriteJSON(response)
+						conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Invalid device signing key"))
+						return
+					}
+					authSigningPublicKey = ed25519.PublicKey(deviceKey.SigningPublicKey)
 					userID = extractedUserID
 					user = &fetchedUser
 					isAuthenticated = true
@@ -155,7 +184,12 @@ func (h *Handler) EstablishConnection(c *gin.Context) {
 		return
 	}
 
-	client := NewClient(conn, user)
+	if len(authSigningPublicKey) != ed25519.PublicKeySize {
+		log.Printf("Auth failed before client initialization: unable to load valid signing key for user %s device %s", user.ID.String(), authMsg.DeviceIdentifier)
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Invalid device signing key"))
+		return
+	}
+	client := NewClient(conn, user, authMsg.DeviceIdentifier, authSigningPublicKey)
 	log.Printf("Client %s (%s) connected. Remote: %s", client.User.ID.String(), client.User.Username, conn.RemoteAddr())
 
 	h.hub.Register <- client
@@ -1051,10 +1085,12 @@ func (h *Handler) GetRelevantMessages(c *gin.Context) {
 		messagesToClient = append(messagesToClient, RawMessageE2EE{
 			ID:             dbMsg.ID,
 			GroupID:        *groupID,
+			SenderDeviceID: dbMsg.SenderDeviceIdentifier.String,
 			SenderID:       *senderID,
 			SenderUsername: dbMsg.SenderUsername,
 			MsgNonce:       base64.StdEncoding.EncodeToString(dbMsg.MsgNonce),
 			Ciphertext:     base64.StdEncoding.EncodeToString(dbMsg.Ciphertext),
+			Signature:      base64.StdEncoding.EncodeToString(dbMsg.Signature),
 			MessageType:    dbMsg.MessageType,
 			Timestamp:      dbMsg.Timestamp.Time.Format(time.RFC3339Nano),
 			Envelopes:      envelopes,

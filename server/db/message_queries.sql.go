@@ -49,21 +49,25 @@ SELECT
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 FROM messages
 ORDER BY created_at DESC
 `
 
 type GetAllMessagesRow struct {
-	ID           uuid.UUID        `json:"id"`
-	UserID       *uuid.UUID       `json:"user_id"`
-	GroupID      *uuid.UUID       `json:"group_id"`
-	CreatedAt    pgtype.Timestamp `json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
-	Ciphertext   []byte           `json:"ciphertext"`
-	MessageType  MessageType      `json:"message_type"`
-	MsgNonce     []byte           `json:"msg_nonce"`
-	KeyEnvelopes []byte           `json:"key_envelopes"`
+	ID                     uuid.UUID        `json:"id"`
+	UserID                 *uuid.UUID       `json:"user_id"`
+	GroupID                *uuid.UUID       `json:"group_id"`
+	CreatedAt              pgtype.Timestamp `json:"created_at"`
+	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	Ciphertext             []byte           `json:"ciphertext"`
+	MessageType            MessageType      `json:"message_type"`
+	MsgNonce               []byte           `json:"msg_nonce"`
+	KeyEnvelopes           []byte           `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text      `json:"sender_device_identifier"`
+	Signature              []byte           `json:"signature"`
 }
 
 // Retrieves all messages. Use with caution on large datasets.
@@ -87,6 +91,8 @@ func (q *Queries) GetAllMessages(ctx context.Context) ([]GetAllMessagesRow, erro
 			&i.MessageType,
 			&i.MsgNonce,
 			&i.KeyEnvelopes,
+			&i.SenderDeviceIdentifier,
+			&i.Signature,
 		); err != nil {
 			return nil, err
 		}
@@ -108,21 +114,25 @@ SELECT
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 FROM messages
 WHERE id = $1
 `
 
 type GetMessageByIdRow struct {
-	ID           uuid.UUID        `json:"id"`
-	UserID       *uuid.UUID       `json:"user_id"`
-	GroupID      *uuid.UUID       `json:"group_id"`
-	CreatedAt    pgtype.Timestamp `json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
-	Ciphertext   []byte           `json:"ciphertext"`
-	MessageType  MessageType      `json:"message_type"`
-	MsgNonce     []byte           `json:"msg_nonce"`
-	KeyEnvelopes []byte           `json:"key_envelopes"`
+	ID                     uuid.UUID        `json:"id"`
+	UserID                 *uuid.UUID       `json:"user_id"`
+	GroupID                *uuid.UUID       `json:"group_id"`
+	CreatedAt              pgtype.Timestamp `json:"created_at"`
+	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	Ciphertext             []byte           `json:"ciphertext"`
+	MessageType            MessageType      `json:"message_type"`
+	MsgNonce               []byte           `json:"msg_nonce"`
+	KeyEnvelopes           []byte           `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text      `json:"sender_device_identifier"`
+	Signature              []byte           `json:"signature"`
 }
 
 func (q *Queries) GetMessageById(ctx context.Context, id uuid.UUID) (GetMessageByIdRow, error) {
@@ -138,6 +148,8 @@ func (q *Queries) GetMessageById(ctx context.Context, id uuid.UUID) (GetMessageB
 		&i.MessageType,
 		&i.MsgNonce,
 		&i.KeyEnvelopes,
+		&i.SenderDeviceIdentifier,
+		&i.Signature,
 	)
 	return i, err
 }
@@ -153,23 +165,27 @@ SELECT
     m.ciphertext,
     m.message_type,
     m.msg_nonce,
-    m.key_envelopes
+    m.key_envelopes,
+    m.sender_device_identifier,
+    m.signature
 FROM messages m
 JOIN users u ON m.user_id = u.id
 WHERE m.group_id = $1
 `
 
 type GetMessagesForGroupRow struct {
-	ID           uuid.UUID        `json:"id"`
-	UserID       *uuid.UUID       `json:"user_id"`
-	Username     string           `json:"username"`
-	GroupID      *uuid.UUID       `json:"group_id"`
-	CreatedAt    pgtype.Timestamp `json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
-	Ciphertext   []byte           `json:"ciphertext"`
-	MessageType  MessageType      `json:"message_type"`
-	MsgNonce     []byte           `json:"msg_nonce"`
-	KeyEnvelopes []byte           `json:"key_envelopes"`
+	ID                     uuid.UUID        `json:"id"`
+	UserID                 *uuid.UUID       `json:"user_id"`
+	Username               string           `json:"username"`
+	GroupID                *uuid.UUID       `json:"group_id"`
+	CreatedAt              pgtype.Timestamp `json:"created_at"`
+	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	Ciphertext             []byte           `json:"ciphertext"`
+	MessageType            MessageType      `json:"message_type"`
+	MsgNonce               []byte           `json:"msg_nonce"`
+	KeyEnvelopes           []byte           `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text      `json:"sender_device_identifier"`
+	Signature              []byte           `json:"signature"`
 }
 
 func (q *Queries) GetMessagesForGroup(ctx context.Context, groupID *uuid.UUID) ([]GetMessagesForGroupRow, error) {
@@ -192,6 +208,8 @@ func (q *Queries) GetMessagesForGroup(ctx context.Context, groupID *uuid.UUID) (
 			&i.MessageType,
 			&i.MsgNonce,
 			&i.KeyEnvelopes,
+			&i.SenderDeviceIdentifier,
+			&i.Signature,
 		); err != nil {
 			return nil, err
 		}
@@ -213,7 +231,9 @@ SELECT
     m.ciphertext,
     m.message_type,
     m.msg_nonce,
-    m.key_envelopes
+    m.key_envelopes,
+    m.sender_device_identifier,
+    m.signature
 FROM messages m
 JOIN user_groups ug ON ug.group_id = m.group_id
 JOIN users u_member ON ug.user_id = u_member.id 
@@ -227,15 +247,17 @@ AND (g.end_time IS NULL OR g.end_time > NOW())
 `
 
 type GetRelevantMessagesRow struct {
-	ID             uuid.UUID        `json:"id"`
-	GroupID        *uuid.UUID       `json:"group_id"`
-	SenderID       *uuid.UUID       `json:"sender_id"`
-	SenderUsername string           `json:"sender_username"`
-	Timestamp      pgtype.Timestamp `json:"timestamp"`
-	Ciphertext     []byte           `json:"ciphertext"`
-	MessageType    MessageType      `json:"message_type"`
-	MsgNonce       []byte           `json:"msg_nonce"`
-	KeyEnvelopes   []byte           `json:"key_envelopes"`
+	ID                     uuid.UUID        `json:"id"`
+	GroupID                *uuid.UUID       `json:"group_id"`
+	SenderID               *uuid.UUID       `json:"sender_id"`
+	SenderUsername         string           `json:"sender_username"`
+	Timestamp              pgtype.Timestamp `json:"timestamp"`
+	Ciphertext             []byte           `json:"ciphertext"`
+	MessageType            MessageType      `json:"message_type"`
+	MsgNonce               []byte           `json:"msg_nonce"`
+	KeyEnvelopes           []byte           `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text      `json:"sender_device_identifier"`
+	Signature              []byte           `json:"signature"`
 }
 
 func (q *Queries) GetRelevantMessages(ctx context.Context, id uuid.UUID) ([]GetRelevantMessagesRow, error) {
@@ -257,6 +279,8 @@ func (q *Queries) GetRelevantMessages(ctx context.Context, id uuid.UUID) ([]GetR
 			&i.MessageType,
 			&i.MsgNonce,
 			&i.KeyEnvelopes,
+			&i.SenderDeviceIdentifier,
+			&i.Signature,
 		); err != nil {
 			return nil, err
 		}
@@ -276,32 +300,38 @@ INSERT INTO messages (
     ciphertext,
     message_type,
     msg_nonce,
-    key_envelopes
+    key_envelopes,
+    sender_device_identifier,
+    signature
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, user_id, group_id, created_at, updated_at, ciphertext, message_type, msg_nonce, key_envelopes
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, user_id, group_id, created_at, updated_at, ciphertext, message_type, msg_nonce, key_envelopes, sender_device_identifier, signature
 `
 
 type InsertMessageParams struct {
-	ID           uuid.UUID   `json:"id"`
-	UserID       *uuid.UUID  `json:"user_id"`
-	GroupID      *uuid.UUID  `json:"group_id"`
-	Ciphertext   []byte      `json:"ciphertext"`
-	MessageType  MessageType `json:"message_type"`
-	MsgNonce     []byte      `json:"msg_nonce"`
-	KeyEnvelopes []byte      `json:"key_envelopes"`
+	ID                     uuid.UUID   `json:"id"`
+	UserID                 *uuid.UUID  `json:"user_id"`
+	GroupID                *uuid.UUID  `json:"group_id"`
+	Ciphertext             []byte      `json:"ciphertext"`
+	MessageType            MessageType `json:"message_type"`
+	MsgNonce               []byte      `json:"msg_nonce"`
+	KeyEnvelopes           []byte      `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text `json:"sender_device_identifier"`
+	Signature              []byte      `json:"signature"`
 }
 
 type InsertMessageRow struct {
-	ID           uuid.UUID        `json:"id"`
-	UserID       *uuid.UUID       `json:"user_id"`
-	GroupID      *uuid.UUID       `json:"group_id"`
-	CreatedAt    pgtype.Timestamp `json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
-	Ciphertext   []byte           `json:"ciphertext"`
-	MessageType  MessageType      `json:"message_type"`
-	MsgNonce     []byte           `json:"msg_nonce"`
-	KeyEnvelopes []byte           `json:"key_envelopes"`
+	ID                     uuid.UUID        `json:"id"`
+	UserID                 *uuid.UUID       `json:"user_id"`
+	GroupID                *uuid.UUID       `json:"group_id"`
+	CreatedAt              pgtype.Timestamp `json:"created_at"`
+	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	Ciphertext             []byte           `json:"ciphertext"`
+	MessageType            MessageType      `json:"message_type"`
+	MsgNonce               []byte           `json:"msg_nonce"`
+	KeyEnvelopes           []byte           `json:"key_envelopes"`
+	SenderDeviceIdentifier pgtype.Text      `json:"sender_device_identifier"`
+	Signature              []byte           `json:"signature"`
 }
 
 func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (InsertMessageRow, error) {
@@ -313,6 +343,8 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 		arg.MessageType,
 		arg.MsgNonce,
 		arg.KeyEnvelopes,
+		arg.SenderDeviceIdentifier,
+		arg.Signature,
 	)
 	var i InsertMessageRow
 	err := row.Scan(
@@ -325,6 +357,8 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 		&i.MessageType,
 		&i.MsgNonce,
 		&i.KeyEnvelopes,
+		&i.SenderDeviceIdentifier,
+		&i.Signature,
 	)
 	return i, err
 }

@@ -127,6 +127,7 @@ const AppLayout = () => {
   const groupsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const usersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deviceKeysIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const catchUpSyncInFlightRef = useRef(false);
 
   const clearAllIntervals = useCallback(() => {
     if (groupsIntervalRef.current) {
@@ -150,22 +151,32 @@ const AppLayout = () => {
     deviceKeysIntervalRef.current = setInterval(fetchDeviceKeys, POLL_INTERVAL);
   }, [clearAllIntervals, fetchGroups, fetchUsers, fetchDeviceKeys]);
 
-  const runCatchUpSync = useCallback(() => {
-    fetchGroups();
-    fetchUsers();
-    loadHistoricalMessages();
-    fetchDeviceKeys();
+  const runCatchUpSync = useCallback(async () => {
+    if (catchUpSyncInFlightRef.current) {
+      return;
+    }
+    catchUpSyncInFlightRef.current = true;
+    try {
+      // Load signing keys first so strict signature verification can process history.
+      await fetchDeviceKeys();
+      await loadHistoricalMessages();
+      await Promise.all([fetchGroups(), fetchUsers()]);
+    } catch (error) {
+      console.error("runCatchUpSync: unexpected sync error", error);
+    } finally {
+      catchUpSyncInFlightRef.current = false;
+    }
   }, [fetchGroups, fetchUsers, loadHistoricalMessages, fetchDeviceKeys]);
 
   useEffect(() => {
     if (user && deviceId) {
       // Initial fetch on mount
-      runCatchUpSync();
+      void runCatchUpSync();
       startIntervals();
 
       const handleAppStateChange = (nextState: AppStateStatus) => {
         if (nextState === "active") {
-          runCatchUpSync();
+          void runCatchUpSync();
           startIntervals();
         } else {
           clearAllIntervals();
@@ -186,10 +197,10 @@ const AppLayout = () => {
   const prevWsConnected = useRef<boolean | null>(null);
   useEffect(() => {
     if (prevWsConnected.current === false && wsConnected && user && deviceId) {
-      loadHistoricalMessages();
+      void runCatchUpSync();
     }
     prevWsConnected.current = wsConnected;
-  }, [wsConnected, user, deviceId, loadHistoricalMessages]);
+  }, [wsConnected, user, deviceId, runCatchUpSync]);
 
   if (isLoading) {
     return (
