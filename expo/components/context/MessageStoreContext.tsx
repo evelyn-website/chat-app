@@ -217,6 +217,12 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const recoveryRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const clearRecoveryRetryTimeout = useCallback(() => {
+    if (recoveryRetryTimeoutRef.current !== null) {
+      clearTimeout(recoveryRetryTimeoutRef.current);
+      recoveryRetryTimeoutRef.current = null;
+    }
+  }, []);
 
   const loadHistoricalMessages = useCallback(
     async (deviceId?: string) => {
@@ -231,6 +237,9 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         ) {
           recoveryRetryTimeoutRef.current = setTimeout(() => {
             recoveryRetryTimeoutRef.current = null;
+            if (!hasPendingSigningKeyRecoveryRef.current) {
+              return;
+            }
             void loadHistoricalMessages(preferredDeviceId);
           }, 1000);
         }
@@ -294,6 +303,9 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         const canReplaceSnapshot =
           isFirstLoad && skippedForMissingSigningKey === 0;
         hasPendingSigningKeyRecoveryRef.current = skippedForMissingSigningKey > 0;
+        if (!hasPendingSigningKeyRecoveryRef.current) {
+          clearRecoveryRetryTimeout();
+        }
         await store.saveMessages(processedMessages, canReplaceSnapshot);
 
         // Mark that we've loaded historical messages at least once
@@ -342,6 +354,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       store,
       globalDeviceId,
       refreshGroups,
+      clearRecoveryRetryTimeout,
     ]
   );
 
@@ -349,6 +362,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     relevantDeviceKeysRef.current = relevantDeviceKeys;
 
     if (!hasPendingSigningKeyRecoveryRef.current) {
+      clearRecoveryRetryTimeout();
       return;
     }
 
@@ -359,16 +373,13 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     void loadHistoricalMessages();
-  }, [relevantDeviceKeys, loadHistoricalMessages]);
+  }, [relevantDeviceKeys, loadHistoricalMessages, clearRecoveryRetryTimeout]);
 
   useEffect(
     () => () => {
-      if (recoveryRetryTimeoutRef.current !== null) {
-        clearTimeout(recoveryRetryTimeoutRef.current);
-        recoveryRetryTimeoutRef.current = null;
-      }
+      clearRecoveryRetryTimeout();
     },
-    []
+    [clearRecoveryRetryTimeout]
   );
 
   useEffect(() => {
