@@ -211,12 +211,12 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     optimisticRef.current = optimistic;
   }, [optimistic]);
 
-  useEffect(() => {
-    relevantDeviceKeysRef.current = relevantDeviceKeys;
-  }, [relevantDeviceKeys]);
-
   const isSyncingHistoricalMessagesRef = useRef(false);
   const lastRecoverySyncAttemptRef = useRef(0);
+  const hasPendingSigningKeyRecoveryRef = useRef(false);
+  const recoveryRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const loadHistoricalMessages = useCallback(
     async (deviceId?: string) => {
@@ -225,6 +225,15 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         console.log(
           "loadHistoricalMessages: Sync already in progress. Skipping."
         );
+        if (
+          hasPendingSigningKeyRecoveryRef.current &&
+          recoveryRetryTimeoutRef.current === null
+        ) {
+          recoveryRetryTimeoutRef.current = setTimeout(() => {
+            recoveryRetryTimeoutRef.current = null;
+            void loadHistoricalMessages(preferredDeviceId);
+          }, 1000);
+        }
         return;
       }
       if (!preferredDeviceId) {
@@ -284,6 +293,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         const isFirstLoad = !hasLoadedHistoricalMessagesRef.current;
         const canReplaceSnapshot =
           isFirstLoad && skippedForMissingSigningKey === 0;
+        hasPendingSigningKeyRecoveryRef.current = skippedForMissingSigningKey > 0;
         await store.saveMessages(processedMessages, canReplaceSnapshot);
 
         // Mark that we've loaded historical messages at least once
@@ -336,6 +346,32 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   useEffect(() => {
+    relevantDeviceKeysRef.current = relevantDeviceKeys;
+
+    if (!hasPendingSigningKeyRecoveryRef.current) {
+      return;
+    }
+
+    // New signing keys arrived while recovery was pending; retry history sync immediately.
+    const hasAnyDeviceKeys = Object.keys(relevantDeviceKeys).length > 0;
+    if (!hasAnyDeviceKeys) {
+      return;
+    }
+
+    void loadHistoricalMessages();
+  }, [relevantDeviceKeys, loadHistoricalMessages]);
+
+  useEffect(
+    () => () => {
+      if (recoveryRetryTimeoutRef.current !== null) {
+        clearTimeout(recoveryRetryTimeoutRef.current);
+        recoveryRetryTimeoutRef.current = null;
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
     const handleNewRawMessage = async (rawMsg: RawMessage) => {
       if (!globalDeviceId) {
         console.error(
@@ -362,6 +398,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
             senderDeviceId: rawMsg.sender_device_id,
           }
         );
+        hasPendingSigningKeyRecoveryRef.current = true;
         const now = Date.now();
         if (now - lastRecoverySyncAttemptRef.current > 2000) {
           lastRecoverySyncAttemptRef.current = now;
