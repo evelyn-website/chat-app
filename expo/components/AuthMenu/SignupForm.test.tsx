@@ -150,6 +150,92 @@ describe("SignupForm", () => {
     });
   });
 
+  describe("debounced validation errors", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("does not show email error immediately after typing an invalid email", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "notanemail");
+      expect(queryByText("Please enter a valid email address")).toBeNull();
+    });
+
+    it("shows email error after the debounce delay", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "notanemail");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText("Please enter a valid email address")).toBeTruthy();
+    });
+
+    it("hides email error immediately when email becomes valid", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "notanemail");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText("Please enter a valid email address")).toBeTruthy();
+
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "valid@example.com");
+      expect(queryByText("Please enter a valid email address")).toBeNull();
+    });
+
+    it("does not show username error immediately after typing a blank username", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Choose a username"), "  ");
+      expect(queryByText(/Username cannot be blank/)).toBeNull();
+    });
+
+    it("shows username error after the debounce delay", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Choose a username"), "  ");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText(/Username cannot be blank/)).toBeTruthy();
+    });
+
+    it("does not show password error immediately after typing a short password", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Create a password (min 8 characters)"), "short");
+      expect(queryByText(/Password must be/)).toBeNull();
+    });
+
+    it("shows password error after the debounce delay", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Create a password (min 8 characters)"), "short");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText(/Password must be/)).toBeTruthy();
+    });
+
+    it("does not show error if user corrects field before delay elapses", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "notanemail");
+      act(() => { jest.advanceTimersByTime(1000); });
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "valid@example.com");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText("Please enter a valid email address")).toBeNull();
+    });
+
+    it("does not show error immediately after clearing and retyping invalid input", () => {
+      const { getByPlaceholderText, queryByText } = render(<SignupForm />);
+      // Type invalid, let debounce settle so debouncedEmail is non-empty
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "notanemail");
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText("Please enter a valid email address")).toBeTruthy();
+
+      // Clear field, then immediately retype invalid input before debounce fires
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "");
+      fireEvent.changeText(getByPlaceholderText("Enter your email"), "alsoinvalid");
+      // Error should not show yet — debounce hasn't caught up to new value
+      expect(queryByText("Please enter a valid email address")).toBeNull();
+
+      // After debounce settles, error shows again
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(queryByText("Please enter a valid email address")).toBeTruthy();
+    });
+  });
+
   describe("form submission", () => {
     function fillAndSubmit(
       utils: ReturnType<typeof render>,
