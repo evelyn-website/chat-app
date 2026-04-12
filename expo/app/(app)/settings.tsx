@@ -124,7 +124,6 @@ export default function SettingsScreen() {
                 setBlockedUsers((prev) =>
                   prev.filter((item) => item.id !== blockedUser.id),
                 );
-                await fetchBlockedUsers(false);
               } catch (error) {
                 console.error("Failed to unblock user:", error);
                 Alert.alert(
@@ -139,7 +138,7 @@ export default function SettingsScreen() {
         ],
       );
     },
-    [fetchBlockedUsers, unblockUser, unblockingUserId],
+    [unblockUser, unblockingUserId],
   );
 
   const handleTogglePushNotifications = useCallback(
@@ -172,8 +171,16 @@ export default function SettingsScreen() {
             );
             return;
           }
-          setIsPushEnabled(true);
-          await AsyncStorage.setItem(SETTINGS_PUSH_ENABLED_KEY, "true");
+          try {
+            await AsyncStorage.setItem(SETTINGS_PUSH_ENABLED_KEY, "true");
+            setIsPushEnabled(true);
+          } catch (storageError) {
+            await clearPushTokenOnServer(deviceId);
+            Alert.alert(
+              "Enable Failed",
+              "Could not save notification settings. Please try again.",
+            );
+          }
         } else {
           const cleared = await clearPushTokenOnServer(deviceId);
           if (!cleared) {
@@ -183,8 +190,19 @@ export default function SettingsScreen() {
             );
             return;
           }
-          setIsPushEnabled(false);
-          await AsyncStorage.setItem(SETTINGS_PUSH_ENABLED_KEY, "false");
+          try {
+            await AsyncStorage.removeItem(SETTINGS_PUSH_ENABLED_KEY);
+            setIsPushEnabled(false);
+          } catch (storageError) {
+            const token = await registerForPushNotificationsAsync();
+            if (token) {
+              await sendPushTokenToServer(token, deviceId);
+            }
+            Alert.alert(
+              "Disable Failed",
+              "Could not save notification settings. Please try again.",
+            );
+          }
         }
       } catch (error) {
         console.error("Failed to update push notifications setting:", error);
