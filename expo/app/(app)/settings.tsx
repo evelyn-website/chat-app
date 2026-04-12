@@ -200,7 +200,7 @@ export default function SettingsScreen() {
             return;
           }
           try {
-            await AsyncStorage.removeItem(SETTINGS_PUSH_ENABLED_KEY);
+            await AsyncStorage.setItem(SETTINGS_PUSH_ENABLED_KEY, "false");
             setIsPushEnabled(false);
           } catch (storageError) {
             console.error("Failed to persist push disabled state:", storageError);
