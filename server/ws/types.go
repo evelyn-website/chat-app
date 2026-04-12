@@ -30,7 +30,7 @@ type RawMessageE2EE struct {
 type ClientSentE2EMessage struct {
 	ID          uuid.UUID      `json:"id" binding:"required"`
 	GroupID     uuid.UUID      `json:"group_id"`
-	Signature   string         `json:"signature" binding:"required"`
+	Signature   string         `json:"signature"`
 	MsgNonce    string         `json:"msgNonce"`   // Base64 encoded
 	Ciphertext  string         `json:"ciphertext"` // Base64 encoded
 	MessageType db.MessageType `json:"messageType"`

@@ -409,6 +409,12 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
             senderDeviceId: rawMsg.sender_device_id,
           }
         );
+        if (optimisticMsg) {
+          updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
+            timestamp: rawMsg.timestamp,
+            pinToBottom: false,
+          });
+        }
         hasPendingSigningKeyRecoveryRef.current = true;
         const now = Date.now();
         if (now - lastRecoverySyncAttemptRef.current > 2000) {

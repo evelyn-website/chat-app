@@ -21,7 +21,7 @@ type RelevantDeviceKeysMap = Record<string, DeviceKey[]>;
 interface ServerDeviceKeyInfo {
   device_identifier: string;
   public_key: string;
-  signing_public_key: string;
+  signing_public_key: string | null;
 }
 
 interface ServerUserWithDeviceKeys {
@@ -162,15 +162,15 @@ export const GlobalStoreProvider = (props: { children: React.ReactNode }) => {
       const processedKeys: RelevantDeviceKeysMap = {};
 
       for (const userWithKeys of serverData) {
-        processedKeys[userWithKeys.user_id] = userWithKeys.device_keys.map(
-          (keyInfo) => ({
+        processedKeys[userWithKeys.user_id] = userWithKeys.device_keys
+          .filter((keyInfo) => keyInfo.signing_public_key !== null)
+          .map((keyInfo) => ({
             deviceId: keyInfo.device_identifier,
             publicKey: encryptionService.base64ToUint8Array(keyInfo.public_key),
             signingPublicKey: encryptionService.base64ToUint8Array(
-              keyInfo.signing_public_key
+              keyInfo.signing_public_key!
             ),
-          })
-        );
+          }));
       }
 
       dispatch({
