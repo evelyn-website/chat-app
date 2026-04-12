@@ -6,6 +6,7 @@ import { MessageType, RecipientDevicePublicKey } from "@/types/types";
 import { v4 } from "uuid";
 import { useMessageStore } from "@/components/context/MessageStoreContext";
 import { OptimisticMessageItem } from "@/components/ChatBox/types";
+import * as deviceService from "@/services/deviceService";
 interface UseSendMessageReturn {
   sendMessage: (
     plaintext: string,
@@ -91,6 +92,8 @@ export const useSendMessage = (): UseSendMessageReturn => {
           setSendError(errorMsg);
           return;
         }
+        const { deviceId, signingPrivateKey } =
+          await deviceService.ensureDeviceIdentity();
 
         const rawMessagePayload =
           await encryptionService.encryptAndPrepareMessageForSending(
@@ -98,7 +101,12 @@ export const useSendMessage = (): UseSendMessageReturn => {
             plaintext,
             group_id,
             recipientDevicePublicKeys,
-            MessageType.TEXT
+            MessageType.TEXT,
+            {
+              senderId: currentUser.id,
+              senderDeviceId: deviceId,
+              senderSigningPrivateKey: signingPrivateKey,
+            }
           );
 
         if (!rawMessagePayload) {

@@ -4,9 +4,14 @@ import (
 	"chat-app-server/db"
 	"chat-app-server/util"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,14 +20,16 @@ import (
 )
 
 type Client struct {
-	conn    *websocket.Conn
-	Message chan *RawMessageE2EE
-	Events  chan *ClientEvent
-	Groups  map[uuid.UUID]bool
-	User    *db.GetUserByIdRow `json:"user"`
-	mutex   sync.RWMutex
-	ctx     context.Context
-	cancel  context.CancelFunc
+	conn             *websocket.Conn
+	Message          chan *RawMessageE2EE
+	Events           chan *ClientEvent
+	Groups           map[uuid.UUID]bool
+	DeviceIdentifier string
+	SigningPublicKey ed25519.PublicKey
+	User             *db.GetUserByIdRow `json:"user"`
+	mutex            sync.RWMutex
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 const (
@@ -32,16 +39,18 @@ const (
 	maxMessageSize = 16 * 1024
 )
 
-func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow) *Client {
+func NewClient(conn *websocket.Conn, user *db.GetUserByIdRow, deviceIdentifier string, signingPublicKey ed25519.PublicKey) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
-		conn:    conn,
-		Message: make(chan *RawMessageE2EE, 10),
-		Events:  make(chan *ClientEvent, 20),
-		Groups:  make(map[uuid.UUID]bool),
-		User:    user,
-		ctx:     ctx,
-		cancel:  cancel,
+		conn:             conn,
+		Message:          make(chan *RawMessageE2EE, 10),
+		Events:           make(chan *ClientEvent, 20),
+		Groups:           make(map[uuid.UUID]bool),
+		DeviceIdentifier: deviceIdentifier,
+		SigningPublicKey: signingPublicKey,
+		User:             user,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 
@@ -149,6 +158,19 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 			}
 			return
 		}
+		if clientMsg.ID == uuid.Nil {
+			log.Printf("Client %d (%s): Received E2EE message with missing ID. Discarding.", c.User.ID, c.User.Username)
+			continue
+		}
+		if strings.TrimSpace(clientMsg.Signature) == "" {
+			log.Printf("Client %d (%s): Received E2EE message with missing signature. Discarding.", c.User.ID, c.User.Username)
+			continue
+		}
+		signatureBytes, err := base64.StdEncoding.DecodeString(clientMsg.Signature)
+		if err != nil || len(signatureBytes) != ed25519.SignatureSize {
+			log.Printf("Client %d (%s): Invalid signature encoding/length for message %s. Discarding.", c.User.ID, c.User.Username, clientMsg.ID)
+			continue
+		}
 
 		isMember, err := util.UserInGroup(c.ctx, c.User.ID, clientMsg.GroupID, queries)
 		if err != nil {
@@ -162,13 +184,31 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 				c.User.ID, c.User.Username, clientMsg.GroupID)
 			continue
 		}
+		if len(c.SigningPublicKey) != ed25519.PublicKeySize {
+			log.Printf("Client %d (%s): Missing/invalid signing public key in session for device %s. Discarding message %s.",
+				c.User.ID, c.User.Username, c.DeviceIdentifier, clientMsg.ID)
+			continue
+		}
+		canonicalPayload, err := buildCanonicalSignedPayload(clientMsg, c.User.ID, c.DeviceIdentifier)
+		if err != nil {
+			log.Printf("Client %d (%s): Failed to build canonical payload for message %s: %v. Discarding.",
+				c.User.ID, c.User.Username, clientMsg.ID, err)
+			continue
+		}
+		if !ed25519.Verify(c.SigningPublicKey, []byte(canonicalPayload), signatureBytes) {
+			log.Printf("Client %d (%s): Signature verification failed for message %s in group %s. Discarding.",
+				c.User.ID, c.User.Username, clientMsg.ID, clientMsg.GroupID)
+			continue
+		}
 
 		hubMessage := &RawMessageE2EE{
 			ID:             clientMsg.ID,
 			GroupID:        clientMsg.GroupID,
+			SenderDeviceID: c.DeviceIdentifier,
 			MessageType:    clientMsg.MessageType,
 			MsgNonce:       clientMsg.MsgNonce,
 			Ciphertext:     clientMsg.Ciphertext,
+			Signature:      clientMsg.Signature,
 			Envelopes:      clientMsg.Envelopes,
 			SenderID:       c.User.ID,
 			SenderUsername: c.User.Username,
@@ -184,4 +224,57 @@ func (c *Client) ReadMessage(hub *Hub, queries *db.Queries) {
 			log.Printf("Hub broadcast channel full for client %d (%s). Message for group %d dropped.", c.User.ID, c.User.Username, hubMessage.GroupID)
 		}
 	}
+}
+
+type canonicalEnvelope struct {
+	DeviceID  string `json:"deviceId"`
+	EphPubKey string `json:"ephPubKey"`
+	KeyNonce  string `json:"keyNonce"`
+	SealedKey string `json:"sealedKey"`
+}
+
+type canonicalPayload struct {
+	ID             string         `json:"id"`
+	GroupID        string         `json:"group_id"`
+	SenderID       string         `json:"sender_id"`
+	SenderDeviceID string         `json:"sender_device_id"`
+	MessageType    db.MessageType `json:"messageType"`
+	MsgNonce       string         `json:"msgNonce"`
+	Ciphertext     string         `json:"ciphertext"`
+	Envelopes      string         `json:"envelopes"`
+}
+
+func buildCanonicalSignedPayload(msg ClientSentE2EMessage, senderID uuid.UUID, senderDeviceID string) (string, error) {
+	normalized := make([]canonicalEnvelope, 0, len(msg.Envelopes))
+	for _, env := range msg.Envelopes {
+		normalized = append(normalized, canonicalEnvelope{
+			DeviceID:  env.DeviceID,
+			EphPubKey: env.EphPubKey,
+			KeyNonce:  env.KeyNonce,
+			SealedKey: env.SealedKey,
+		})
+	}
+	sort.Slice(normalized, func(i, j int) bool {
+		return normalized[i].DeviceID < normalized[j].DeviceID
+	})
+	envelopesJSON, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+
+	payload := canonicalPayload{
+		ID:             msg.ID.String(),
+		GroupID:        msg.GroupID.String(),
+		SenderID:       senderID.String(),
+		SenderDeviceID: senderDeviceID,
+		MessageType:    msg.MessageType,
+		MsgNonce:       msg.MsgNonce,
+		Ciphertext:     msg.Ciphertext,
+		Envelopes:      string(envelopesJSON),
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(payloadJSON), nil
 }

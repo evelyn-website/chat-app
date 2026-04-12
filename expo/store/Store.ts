@@ -20,7 +20,7 @@ export class Store implements IStore {
       throw new Error("Database not available for initialization.");
     }
 
-    const TARGET_DATABASE_VERSION = 12;
+    const TARGET_DATABASE_VERSION = 13;
 
     let { user_version: currentDbVersion } = (await this.db.getFirstAsync<{
       user_version: number;
@@ -312,6 +312,27 @@ export class Store implements IStore {
       }
     }
 
+    if (currentDbVersion === 12) {
+      console.log("Migrating to version 13 (Message signatures)...");
+      await this.db.execAsync("BEGIN TRANSACTION;");
+      try {
+        await this.db.execAsync(`
+          ALTER TABLE messages ADD COLUMN sender_device_id TEXT;
+        `);
+        await this.db.execAsync(`
+          ALTER TABLE messages ADD COLUMN signature BLOB;
+        `);
+        await this.db.execAsync("COMMIT;");
+        await this.db.execAsync(`PRAGMA user_version = 13`);
+        currentDbVersion = 13;
+        console.log("Successfully migrated to version 13.");
+      } catch (error) {
+        await this.db.execAsync("ROLLBACK;");
+        console.error("Error migrating database to version 13:", error);
+        throw error;
+      }
+    }
+
     if (currentDbVersion === TARGET_DATABASE_VERSION) {
       console.log("Database is up to date.");
     } else if (currentDbVersion < TARGET_DATABASE_VERSION) {
@@ -433,12 +454,13 @@ export class Store implements IStore {
       }
       for (const message of messagesToSave) {
         await db.runAsync(
-          `INSERT OR REPLACE INTO messages (id, user_id, group_id, timestamp, client_seq, client_timestamp,
-          ciphertext, message_type, msg_nonce, sender_ephemeral_public_key, sym_key_encryption_nonce, sealed_symmetric_key, sender_username)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT OR REPLACE INTO messages (id, user_id, sender_device_id, group_id, timestamp, client_seq, client_timestamp,
+          ciphertext, message_type, msg_nonce, sender_ephemeral_public_key, sym_key_encryption_nonce, sealed_symmetric_key, signature, sender_username)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             message.id,
             message.sender_id,
+            message.sender_device_id || null,
             message.group_id,
             message.timestamp,
             message.client_seq ?? null,
@@ -449,6 +471,9 @@ export class Store implements IStore {
             message.sender_ephemeral_public_key,
             message.sym_key_encryption_nonce,
             message.sealed_symmetric_key,
+            message.signature && message.signature.length > 0
+              ? message.signature
+              : null,
             message.sender_username ?? null,
           ]
         );
@@ -541,13 +566,14 @@ export class Store implements IStore {
     const db = await this.getDb();
     const result = await db.getAllAsync<MessageRow>(`
       SELECT m.id as message_id, m.group_id,
-            m.user_id, m.timestamp, m.client_seq, m.client_timestamp,
+            m.user_id, m.sender_device_id, m.timestamp, m.client_seq, m.client_timestamp,
             m.ciphertext,
             m.message_type,
             m.msg_nonce,
             m.sender_ephemeral_public_key,
             m.sym_key_encryption_nonce,
             m.sealed_symmetric_key,
+            m.signature,
             m.sender_username
       FROM messages AS m
     `);
@@ -556,6 +582,7 @@ export class Store implements IStore {
         id: row.message_id,
         group_id: row.group_id,
         sender_id: row.user_id,
+        sender_device_id: row.sender_device_id ?? "",
         sender_username: row.sender_username ?? undefined,
         timestamp: row.timestamp,
         client_seq: row.client_seq,
@@ -566,6 +593,7 @@ export class Store implements IStore {
         sender_ephemeral_public_key: row.sender_ephemeral_public_key,
         sym_key_encryption_nonce: row.sym_key_encryption_nonce,
         sealed_symmetric_key: row.sealed_symmetric_key,
+        signature: row.signature ?? new Uint8Array(0),
       })) ?? []
     );
   }

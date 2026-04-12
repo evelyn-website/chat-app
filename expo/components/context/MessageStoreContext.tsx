@@ -138,7 +138,8 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [state, dispatch] = useReducer(messageReducer, initialState);
   const { onMessage, removeMessageHandler } = useWebSocket();
-  const { store, deviceId: globalDeviceId, refreshGroups } = useGlobalStore();
+  const { store, deviceId: globalDeviceId, refreshGroups, relevantDeviceKeys } =
+    useGlobalStore();
 
   const [optimistic, setOptimistic] = useState<
     Record<string, OptimisticMessageItem[]>
@@ -147,6 +148,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const globalClientSequenceRef = useRef(0);
   const hasLoadedHistoricalMessagesRef = useRef(false);
   const optimisticRef = useRef<Record<string, OptimisticMessageItem[]>>({});
+  const relevantDeviceKeysRef = useRef(relevantDeviceKeys);
 
   const getNextClientSeq = useCallback(() => {
     return ++globalClientSequenceRef.current;
@@ -210,6 +212,17 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [optimistic]);
 
   const isSyncingHistoricalMessagesRef = useRef(false);
+  const lastRecoverySyncAttemptRef = useRef(0);
+  const hasPendingSigningKeyRecoveryRef = useRef(false);
+  const recoveryRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const clearRecoveryRetryTimeout = useCallback(() => {
+    if (recoveryRetryTimeoutRef.current !== null) {
+      clearTimeout(recoveryRetryTimeoutRef.current);
+      recoveryRetryTimeoutRef.current = null;
+    }
+  }, []);
 
   const loadHistoricalMessages = useCallback(
     async (deviceId?: string) => {
@@ -218,6 +231,18 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         console.log(
           "loadHistoricalMessages: Sync already in progress. Skipping."
         );
+        if (
+          hasPendingSigningKeyRecoveryRef.current &&
+          recoveryRetryTimeoutRef.current === null
+        ) {
+          recoveryRetryTimeoutRef.current = setTimeout(() => {
+            recoveryRetryTimeoutRef.current = null;
+            if (!hasPendingSigningKeyRecoveryRef.current) {
+              return;
+            }
+            void loadHistoricalMessages(preferredDeviceId);
+          }, 1000);
+        }
         return;
       }
       if (!preferredDeviceId) {
@@ -237,14 +262,24 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         const rawMessages: RawMessage[] = response.data;
         const processedMessages: DbMessage[] = [];
+        let skippedForMissingSigningKey = 0;
 
         for (const rawMsg of rawMessages) {
+          const senderSigningPublicKey = (
+            relevantDeviceKeysRef.current[rawMsg.sender_id] || []
+          ).find((key) => key.deviceId === rawMsg.sender_device_id)
+            ?.signingPublicKey;
+          if (!senderSigningPublicKey) {
+            skippedForMissingSigningKey++;
+            continue;
+          }
           const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
             rawMsg,
             preferredDeviceId,
             rawMsg.sender_id,
             rawMsg.id,
             rawMsg.timestamp,
+            senderSigningPublicKey,
             rawMsg.sender_username
           );
           if (baseProcessed) {
@@ -261,15 +296,23 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           // an envelope for this device - this is expected for historical messages
         }
 
-        // Only clear messages on the first historical load to prevent flash
+        // Only replace the full local snapshot when we can process every server message.
+        // If some messages are skipped due to missing signing keys, merge instead to avoid
+        // wiping locally cached history during startup races.
         const isFirstLoad = !hasLoadedHistoricalMessagesRef.current;
-        await store.saveMessages(processedMessages, isFirstLoad);
+        const canReplaceSnapshot =
+          isFirstLoad && skippedForMissingSigningKey === 0;
+        hasPendingSigningKeyRecoveryRef.current = skippedForMissingSigningKey > 0;
+        if (!hasPendingSigningKeyRecoveryRef.current) {
+          clearRecoveryRetryTimeout();
+        }
+        await store.saveMessages(processedMessages, canReplaceSnapshot);
 
         // Mark that we've loaded historical messages at least once
         hasLoadedHistoricalMessagesRef.current = true;
 
         dispatch({
-          type: isFirstLoad ? "SET_HISTORICAL_MESSAGES" : "MERGE_MESSAGES",
+          type: canReplaceSnapshot ? "SET_HISTORICAL_MESSAGES" : "MERGE_MESSAGES",
           payload: processedMessages,
         });
         dispatch({ type: "SET_ERROR", payload: null });
@@ -311,7 +354,32 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       store,
       globalDeviceId,
       refreshGroups,
+      clearRecoveryRetryTimeout,
     ]
+  );
+
+  useEffect(() => {
+    relevantDeviceKeysRef.current = relevantDeviceKeys;
+
+    if (!hasPendingSigningKeyRecoveryRef.current) {
+      clearRecoveryRetryTimeout();
+      return;
+    }
+
+    // New signing keys arrived while recovery was pending; retry history sync immediately.
+    const hasAnyDeviceKeys = Object.keys(relevantDeviceKeys).length > 0;
+    if (!hasAnyDeviceKeys) {
+      return;
+    }
+
+    void loadHistoricalMessages();
+  }, [relevantDeviceKeys, loadHistoricalMessages, clearRecoveryRetryTimeout]);
+
+  useEffect(
+    () => () => {
+      clearRecoveryRetryTimeout();
+    },
+    [clearRecoveryRetryTimeout]
   );
 
   useEffect(() => {
@@ -328,26 +396,54 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         (m) => m.id === rawMsg.id
       );
 
-      // Update optimistic message with server timestamp and unpin from bottom
-      // This allows it to sort correctly while waiting for decryption
-      if (optimisticMsg) {
-        updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
-          timestamp: rawMsg.timestamp,
-          pinToBottom: false,
-        });
+      const senderSigningPublicKey = (
+        relevantDeviceKeysRef.current[rawMsg.sender_id] || []
+      ).find((key) => key.deviceId === rawMsg.sender_device_id)
+        ?.signingPublicKey;
+      if (!senderSigningPublicKey) {
+        if (DEBUG.MESSAGE_FLOW) {
+          console.warn(
+            "handleNewRawMessage: Missing sender signing key; scheduling historical recovery sync.",
+            {
+              messageId: rawMsg.id,
+              senderId: rawMsg.sender_id,
+              senderDeviceId: rawMsg.sender_device_id,
+            }
+          );
+        }
+        if (optimisticMsg) {
+          updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
+            timestamp: rawMsg.timestamp,
+            pinToBottom: false,
+          });
+        }
+        hasPendingSigningKeyRecoveryRef.current = true;
+        const now = Date.now();
+        if (now - lastRecoverySyncAttemptRef.current > 2000) {
+          lastRecoverySyncAttemptRef.current = now;
+          void loadHistoricalMessages();
+        }
+        return;
       }
-
-      const baseProcessed =
-        encryptionService.processAndDecodeIncomingMessage(
-          rawMsg,
-          globalDeviceId,
-          rawMsg.sender_id,
-          rawMsg.id,
-          rawMsg.timestamp,
-          rawMsg.sender_username
-        );
+      const baseProcessed = encryptionService.processAndDecodeIncomingMessage(
+        rawMsg,
+        globalDeviceId,
+        rawMsg.sender_id,
+        rawMsg.id,
+        rawMsg.timestamp,
+        senderSigningPublicKey,
+        rawMsg.sender_username
+      );
 
       if (baseProcessed) {
+        // Only unpin/update optimistic message after verification/decode succeeds.
+        if (optimisticMsg) {
+          updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
+            timestamp: rawMsg.timestamp,
+            pinToBottom: false,
+          });
+        }
+
         const processedMessage: DbMessage = {
           ...baseProcessed,
           client_seq: optimisticMsg?.clientSeq ?? null,
@@ -384,6 +480,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     globalDeviceId,
     refreshGroups,
     updateOptimisticMessage,
+    loadHistoricalMessages,
   ]);
 
   const getMessagesForGroup = useCallback(

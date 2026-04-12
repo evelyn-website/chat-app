@@ -44,6 +44,7 @@ export interface IStore {
 export interface MessageRow {
   message_id: string;
   user_id: string;
+  sender_device_id: string;
   group_id: string;
   timestamp: string;
   client_seq: number | null;
@@ -56,6 +57,7 @@ export interface MessageRow {
   sender_ephemeral_public_key: Uint8Array;
   sym_key_encryption_nonce: Uint8Array;
   sealed_symmetric_key: Uint8Array;
+  signature: Uint8Array;
 }
 
 export interface GroupRow {

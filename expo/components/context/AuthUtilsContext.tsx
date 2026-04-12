@@ -139,9 +139,11 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
   const login = useCallback(
     async (email: string, password: string): Promise<void> => {
       try {
-        const { deviceId, publicKey } =
+        const { deviceId, publicKey, signingPublicKey } =
           await deviceService.ensureDeviceIdentity();
         const base64PublicKey = encryptionService.uint8ArrayToBase64(publicKey);
+        const base64SigningPublicKey =
+          encryptionService.uint8ArrayToBase64(signingPublicKey);
 
         const response = await axios.post(
           `${process.env.EXPO_PUBLIC_HOST}/auth/login`,
@@ -150,6 +152,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
+            signing_public_key: base64SigningPublicKey,
           },
         );
         const { data } = response;
@@ -175,9 +178,11 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
       password: string,
     ): Promise<void> => {
       try {
-        const { deviceId, publicKey } =
+        const { deviceId, publicKey, signingPublicKey } =
           await deviceService.ensureDeviceIdentity();
         const base64PublicKey = encryptionService.uint8ArrayToBase64(publicKey);
+        const base64SigningPublicKey =
+          encryptionService.uint8ArrayToBase64(signingPublicKey);
 
         const response = await axios.post(
           `${process.env.EXPO_PUBLIC_HOST}/auth/signup`,
@@ -187,6 +192,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             password: password,
             device_identifier: deviceId,
             public_key: base64PublicKey,
+            signing_public_key: base64SigningPublicKey,
           },
         );
         const { data } = response;
