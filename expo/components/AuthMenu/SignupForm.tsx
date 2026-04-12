@@ -2,6 +2,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { isAxiosError } from "axios";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useAuthUtils } from "../context/AuthUtilsContext";
 import Button from "../Global/Button/Button";
 
@@ -38,6 +39,10 @@ export default function SignupForm() {
   const [showPicker, setShowPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const debouncedEmail = useDebounce(email, 1500);
+  const debouncedUsername = useDebounce(username, 1500);
+  const debouncedPassword = useDebounce(password, 1500);
 
   const isUsernameValid = username.trim().length > 0 && username.trim().length <= MAX_USERNAME_LENGTH;
   const isEmailValid = email.trim().length > 0 && EMAIL_REGEX.test(email.trim()) && email.trim().length <= MAX_EMAIL_LENGTH;
@@ -85,7 +90,7 @@ export default function SignupForm() {
             onChangeText={setEmail}
             value={email}
           />
-          {email.length > 0 && !isEmailValid && (
+          {email.length > 0 && debouncedEmail === email && !isEmailValid && (
             <Text className="text-amber-500 text-xs mt-1">
               Please enter a valid email address
             </Text>
@@ -105,7 +110,7 @@ export default function SignupForm() {
             value={username}
             maxLength={MAX_USERNAME_LENGTH}
           />
-          {username.length > 0 && !isUsernameValid && (
+          {username.length > 0 && debouncedUsername === username && !isUsernameValid && (
             <Text className="text-amber-500 text-xs mt-1">
               Username cannot be blank or exceed {MAX_USERNAME_LENGTH} characters
             </Text>
@@ -126,7 +131,7 @@ export default function SignupForm() {
             value={password}
             maxLength={MAX_PASSWORD_LENGTH}
           />
-          {password.length > 0 && !isPasswordValid && (
+          {password.length > 0 && debouncedPassword === password && !isPasswordValid && (
             <Text className="text-amber-500 text-xs mt-1">
               Password must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters
             </Text>
