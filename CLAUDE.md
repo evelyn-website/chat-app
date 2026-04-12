@@ -377,6 +377,7 @@ tx.Commit(ctx)
 - Type external APIs strongly
 - Prefer `services/*` for network and encryption
 - File-based routing with Expo Router
+- **Never put test files in the `expo/app/` directory** — Expo Router treats all files there as routes; place tests alongside the components/hooks/services they test instead
 
 **Security:**
 - All `/api`, `/ws` (except initial upgrade), and `/images` routes require JWT
