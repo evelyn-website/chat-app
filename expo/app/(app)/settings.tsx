@@ -175,11 +175,20 @@ export default function SettingsScreen() {
             await AsyncStorage.setItem(SETTINGS_PUSH_ENABLED_KEY, "true");
             setIsPushEnabled(true);
           } catch (storageError) {
-            await clearPushTokenOnServer(deviceId);
-            Alert.alert(
-              "Enable Failed",
-              "Could not save notification settings. Please try again.",
-            );
+            console.error("Failed to persist push enabled state:", storageError);
+            const rolledBack = await clearPushTokenOnServer(deviceId);
+            if (!rolledBack) {
+              console.error("Rollback failed: push token still registered on server");
+              Alert.alert(
+                "Enable Failed",
+                "Could not save notification settings and could not roll back. Please try disabling and re-enabling push notifications.",
+              );
+            } else {
+              Alert.alert(
+                "Enable Failed",
+                "Could not save notification settings. Please try again.",
+              );
+            }
           }
         } else {
           const cleared = await clearPushTokenOnServer(deviceId);
@@ -194,14 +203,29 @@ export default function SettingsScreen() {
             await AsyncStorage.removeItem(SETTINGS_PUSH_ENABLED_KEY);
             setIsPushEnabled(false);
           } catch (storageError) {
+            console.error("Failed to persist push disabled state:", storageError);
             const token = await registerForPushNotificationsAsync();
             if (token) {
-              await sendPushTokenToServer(token, deviceId);
+              const reRegistered = await sendPushTokenToServer(token, deviceId);
+              if (!reRegistered) {
+                console.error("Rollback failed: could not re-register push token after storage failure");
+                Alert.alert(
+                  "Disable Failed",
+                  "Could not save notification settings and could not roll back. Please try toggling push notifications again.",
+                );
+              } else {
+                Alert.alert(
+                  "Disable Failed",
+                  "Could not save notification settings. Please try again.",
+                );
+              }
+            } else {
+              console.error("Rollback failed: no push token available to re-register after storage failure");
+              Alert.alert(
+                "Disable Failed",
+                "Could not save notification settings. Push notifications may be in an inconsistent state — please try toggling again.",
+              );
             }
-            Alert.alert(
-              "Disable Failed",
-              "Could not save notification settings. Please try again.",
-            );
           }
         }
       } catch (error) {
