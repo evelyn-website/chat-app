@@ -18,6 +18,14 @@ jest.mock("../context/MessageStoreContext", () => ({
   }),
 }));
 
+jest.mock("../context/TimeFormatContext", () => ({
+  useTimeFormat: () => ({
+    use24HourTime: false,
+    isLoading: false,
+    setUse24HourTime: jest.fn(),
+  }),
+}));
+
 const mockToggleGroupMuted = jest.fn();
 
 jest.mock("../context/WebSocketContext", () => ({
