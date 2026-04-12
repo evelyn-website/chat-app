@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const SETTINGS_PUSH_ENABLED_KEY = "settings_push_enabled";
+export const SETTINGS_PUSH_ENABLED_KEY = "settings_push_enabled";
 
 export default function SettingsScreen() {
   const { logout } = useAuthUtils();
