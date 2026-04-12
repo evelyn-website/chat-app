@@ -401,14 +401,16 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       ).find((key) => key.deviceId === rawMsg.sender_device_id)
         ?.signingPublicKey;
       if (!senderSigningPublicKey) {
-        console.warn(
-          "handleNewRawMessage: Missing sender signing key; scheduling historical recovery sync.",
-          {
-            messageId: rawMsg.id,
-            senderId: rawMsg.sender_id,
-            senderDeviceId: rawMsg.sender_device_id,
-          }
-        );
+        if (DEBUG.MESSAGE_FLOW) {
+          console.warn(
+            "handleNewRawMessage: Missing sender signing key; scheduling historical recovery sync.",
+            {
+              messageId: rawMsg.id,
+              senderId: rawMsg.sender_id,
+              senderDeviceId: rawMsg.sender_device_id,
+            }
+          );
+        }
         if (optimisticMsg) {
           updateOptimisticMessage(rawMsg.group_id, rawMsg.id, {
             timestamp: rawMsg.timestamp,
