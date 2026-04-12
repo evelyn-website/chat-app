@@ -141,6 +141,7 @@ type User struct {
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 	Email     string           `json:"email"`
 	Password  pgtype.Text      `json:"password"`
+	Birthday  pgtype.Date      `json:"birthday"`
 }
 
 type UserGroup struct {

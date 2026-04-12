@@ -83,6 +83,20 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
+	birthday, err := time.Parse("2006-01-02", req.Birthday)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid birthday format, expected YYYY-MM-DD"})
+		return
+	}
+	age := time.Now().Year() - birthday.Year()
+	if time.Now().YearDay() < birthday.YearDay() {
+		age--
+	}
+	if age < 18 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "You must be at least 18 years old to sign up"})
+		return
+	}
+
 	pwd := []byte(req.Password)
 	hash, err := bcrypt.GenerateFromPassword(pwd, 12)
 	if err != nil {
@@ -90,7 +104,8 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: strings.TrimSpace(req.Username), Email: req.Email, Password: pgtype.Text{String: string(hash), Valid: true}})
+	pgBirthday := pgtype.Date{Time: birthday, Valid: true}
+	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: strings.TrimSpace(req.Username), Email: req.Email, Password: pgtype.Text{String: string(hash), Valid: true}, Birthday: pgBirthday})
 	if err != nil {
 		log.Printf("Error inserting user during signup for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Signup failed, possibly due to existing user or database issue."})
