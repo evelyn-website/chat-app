@@ -88,8 +88,9 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid birthday format, expected YYYY-MM-DD"})
 		return
 	}
-	age := time.Now().Year() - birthday.Year()
-	if time.Now().YearDay() < birthday.YearDay() {
+	now := time.Now()
+	age := now.Year() - birthday.Year()
+	if now.Month() < birthday.Month() || (now.Month() == birthday.Month() && now.Day() < birthday.Day()) {
 		age--
 	}
 	if age < 18 {
