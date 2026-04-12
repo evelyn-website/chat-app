@@ -2,7 +2,7 @@ import React from "react";
 import { Alert } from "react-native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import SettingsScreen from "@/app/(app)/settings";
+import SettingsScreen, { SETTINGS_PUSH_ENABLED_KEY } from "@/app/(app)/settings";
 
 const mockLogout = jest.fn();
 const mockSetUse24HourTime = jest.fn().mockResolvedValue(undefined);
@@ -164,7 +164,7 @@ describe("SettingsScreen", () => {
         "device-1",
       );
       expect(mockSetItem).toHaveBeenCalledWith(
-        "settings_push_enabled",
+        SETTINGS_PUSH_ENABLED_KEY,
         "true",
       );
     });
@@ -186,7 +186,7 @@ describe("SettingsScreen", () => {
     await waitFor(() => {
       expect(mockClearPushTokenOnServer).toHaveBeenCalledWith("device-1");
       expect(mockSetItem).toHaveBeenCalledWith(
-        "settings_push_enabled",
+        SETTINGS_PUSH_ENABLED_KEY,
         "false",
       );
     });
