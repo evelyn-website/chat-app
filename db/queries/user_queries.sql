@@ -33,7 +33,7 @@ SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM us
 SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM users WHERE LOWER(email) = LOWER($1);
 
 -- name: InsertUser :one
-INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING "id", "username", "email", "created_at", "updated_at";
+INSERT INTO users (username, email, password, birthday) VALUES ($1, $2, $3, $4) RETURNING "id", "username", "email", "created_at", "updated_at";
 
 -- name: UpdateUser :one
 UPDATE users 

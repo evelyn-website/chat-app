@@ -467,13 +467,14 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]GetUser
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING "id", "username", "email", "created_at", "updated_at"
+INSERT INTO users (username, email, password, birthday) VALUES ($1, $2, $3, $4) RETURNING "id", "username", "email", "created_at", "updated_at"
 `
 
 type InsertUserParams struct {
 	Username string      `json:"username"`
 	Email    string      `json:"email"`
 	Password pgtype.Text `json:"password"`
+	Birthday pgtype.Date `json:"birthday"`
 }
 
 type InsertUserRow struct {
@@ -485,7 +486,12 @@ type InsertUserRow struct {
 }
 
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error) {
-	row := q.db.QueryRow(ctx, insertUser, arg.Username, arg.Email, arg.Password)
+	row := q.db.QueryRow(ctx, insertUser,
+		arg.Username,
+		arg.Email,
+		arg.Password,
+		arg.Birthday,
+	)
 	var i InsertUserRow
 	err := row.Scan(
 		&i.ID,

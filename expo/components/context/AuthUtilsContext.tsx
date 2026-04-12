@@ -17,7 +17,7 @@ interface AuthUtilsContextType {
   whoami: (forceRefresh?: boolean) => Promise<WhoAmIResult>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  signup: (username: string, email: string, password: string) => Promise<void>;
+  signup: (username: string, email: string, password: string, birthday: string) => Promise<void>;
 }
 interface WhoAmIResult {
   user: User | undefined;
@@ -176,6 +176,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
       username: string,
       email: string,
       password: string,
+      birthday: string,
     ): Promise<void> => {
       try {
         const { deviceId, publicKey, signingPublicKey } =
@@ -190,6 +191,7 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
             username: username,
             email: email,
             password: password,
+            birthday: birthday,
             device_identifier: deviceId,
             public_key: base64PublicKey,
             signing_public_key: base64SigningPublicKey,
@@ -204,7 +206,6 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
         await loadHistoricalMessages();
         await handlePendingInvite();
       } catch (error) {
-        console.error("Error signing up:", error);
         throw error;
       }
     },

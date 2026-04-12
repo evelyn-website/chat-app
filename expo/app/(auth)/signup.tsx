@@ -4,7 +4,7 @@ import SignupForm from "@/components/AuthMenu/SignupForm";
 
 const Login = () => {
   return (
-    <ExpoRouterModal title="Create Account" scrollable={false}>
+    <ExpoRouterModal title="Create Account">
       <SignupForm />
     </ExpoRouterModal>
   );
