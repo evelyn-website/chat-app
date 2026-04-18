@@ -1,8 +1,8 @@
 import { User } from "@/types/types";
-import http from "@/util/custom-axios";
+import http, { setLogoutCallback } from "@/util/custom-axios";
 import { save, clear } from "@/util/custom-store";
 import axios, { CanceledError, isAxiosError } from "axios";
-import React, { createContext, useContext, useCallback } from "react";
+import React, { createContext, useContext, useCallback, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGlobalStore } from "./GlobalStoreContext";
 import { useWebSocket } from "./WebSocketContext";
@@ -29,17 +29,25 @@ const AuthUtilsContext = createContext<AuthUtilsContextType | undefined>(
 );
 
 export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
-  const { establishConnection, disconnect, connected, acceptInvite } =
-    useWebSocket();
-  const { loadHistoricalMessages } = useMessageStore();
+  const {
+    establishConnection,
+    disconnect,
+    connected,
+    acceptInvite,
+    onAuthFailure,
+    removeAuthFailureHandler,
+  } = useWebSocket();
+  const { loadHistoricalMessages, clearAllMessages } = useMessageStore();
   const {
     user,
     setUser,
     setDeviceId,
     deviceId: globalDeviceId,
     refreshGroups,
+    store,
   } = useGlobalStore();
   const { children } = props;
+  const loggingOutRef = useRef(false);
 
   const handlePendingInvite = useCallback(async () => {
     try {
@@ -213,6 +221,10 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
   );
 
   const logout = useCallback(async () => {
+    if (loggingOutRef.current) {
+      return;
+    }
+    loggingOutRef.current = true;
     try {
       // Clear push token BEFORE clearing JWT (request needs auth)
       if (globalDeviceId) {
@@ -226,12 +238,43 @@ export const AuthUtilsProvider = (props: { children: React.ReactNode }) => {
       if (connected) {
         await disconnect();
       }
+      try {
+        await store.clearAll();
+      } catch (storeError) {
+        console.error("Error clearing local store on logout:", storeError);
+      }
+      try {
+        clearAllMessages();
+      } catch (msgError) {
+        console.error("Error clearing in-memory messages on logout:", msgError);
+      }
     } catch (error) {
       console.error("Error during logout:", error);
     } finally {
       router.replace({ pathname: "/(auth)" });
+      loggingOutRef.current = false;
     }
-  }, [setUser, setDeviceId, connected, disconnect, globalDeviceId]);
+  }, [
+    setUser,
+    setDeviceId,
+    connected,
+    disconnect,
+    globalDeviceId,
+    store,
+    clearAllMessages,
+  ]);
+
+  // Register logout as the axios 401 handler and the WebSocket auth-failure
+  // handler so implicit logout paths (expired JWT, server-side rejection) wipe
+  // local state the same way an explicit Settings logout does.
+  useEffect(() => {
+    setLogoutCallback(logout);
+    onAuthFailure(logout);
+    return () => {
+      setLogoutCallback(null);
+      removeAuthFailureHandler(logout);
+    };
+  }, [logout, onAuthFailure, removeAuthFailureHandler]);
 
   return (
     <AuthUtilsContext.Provider value={{ whoami, login, logout, signup }}>

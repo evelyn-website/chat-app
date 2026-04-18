@@ -38,6 +38,7 @@ export interface IStore {
   markGroupRead(groupId: string): Promise<void>;
   deleteGroup(groupId: string): Promise<void>;
   deleteExpiredGroups(): Promise<string[]>;
+  clearAll(): Promise<void>;
   close(): Promise<void>;
 }
 

@@ -23,7 +23,8 @@ type MessageAction =
   | { type: "MERGE_MESSAGES"; payload: DbMessage[] }
   | { type: "REMOVE_GROUP_MESSAGES"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
-  | { type: "SET_ERROR"; payload: string | null };
+  | { type: "SET_ERROR"; payload: string | null }
+  | { type: "CLEAR_ALL" };
 
 interface MessageState {
   messages: Record<string, DbMessage[]>;
@@ -37,6 +38,7 @@ interface MessageStoreContextType {
   error: string | null;
   loadHistoricalMessages: (deviceId?: string) => Promise<void>;
   removeGroupMessages: (groupId: string) => void;
+  clearAllMessages: () => void;
   optimistic: Record<string, OptimisticMessageItem[]>;
   addOptimisticDisplayable: (item: OptimisticMessageItem) => void;
   removeOptimisticDisplayable: (groupId: string, id: string) => void;
@@ -124,6 +126,8 @@ export const messageReducer = (
       return { ...state, loading: action.payload };
     case "SET_ERROR":
       return { ...state, error: action.payload };
+    case "CLEAR_ALL":
+      return initialState;
     default:
       return state;
   }
@@ -497,6 +501,17 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const clearAllMessages = useCallback(() => {
+    dispatch({ type: "CLEAR_ALL" });
+    setOptimistic({});
+    optimisticRef.current = {};
+    globalClientSequenceRef.current = 0;
+    hasLoadedHistoricalMessagesRef.current = false;
+    hasPendingSigningKeyRecoveryRef.current = false;
+    lastRecoverySyncAttemptRef.current = 0;
+    clearRecoveryRetryTimeout();
+  }, [clearRecoveryRetryTimeout]);
+
   const value = useMemo(
     () => ({
       getMessagesForGroup,
@@ -504,6 +519,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       error: state.error,
       loadHistoricalMessages,
       removeGroupMessages,
+      clearAllMessages,
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,
@@ -515,6 +531,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       state.error,
       loadHistoricalMessages,
       removeGroupMessages,
+      clearAllMessages,
       optimistic,
       addOptimisticDisplayable,
       removeOptimisticDisplayable,

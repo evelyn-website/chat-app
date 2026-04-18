@@ -562,6 +562,18 @@ export class Store implements IStore {
     await db.runAsync("DELETE FROM users;");
   }
 
+  async clearAll(): Promise<void> {
+    return this.performSerialTransaction(async (db) => {
+      // Explicit deletes match the pattern in deleteGroup/deleteExpiredGroups.
+      // group_reads and messages would also cascade from groups, but explicit
+      // deletes avoid relying on PRAGMA foreign_keys remaining enabled.
+      await db.runAsync("DELETE FROM group_reads;");
+      await db.runAsync("DELETE FROM messages;");
+      await db.runAsync("DELETE FROM groups;");
+      await db.runAsync("DELETE FROM users;");
+    });
+  }
+
   async loadMessages(): Promise<DbMessage[]> {
     const db = await this.getDb();
     const result = await db.getAllAsync<MessageRow>(`
