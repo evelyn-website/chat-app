@@ -299,22 +299,20 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                 }
               } else if (parsedData.type === "auth_failure") {
                 preventRetriesRef.current = true;
+                socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
+                authFailureHandlersRef.current.forEach((handler) => {
+                  Promise.resolve(handler()).catch((handlerError) => {
+                    console.error(
+                      "Error in auth failure handler:",
+                      handlerError,
+                    );
+                  });
+                });
                 safeReject(
                   new Error(
                     `Authentication failed: ${parsedData.error || "Unknown reason"}`,
                   ),
                 );
-                socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
-                authFailureHandlersRef.current.forEach((handler) => {
-                  try {
-                    handler();
-                  } catch (handlerError) {
-                    console.error(
-                      "Error in auth failure handler:",
-                      handlerError,
-                    );
-                  }
-                });
               } else {
                 preventRetriesRef.current = true;
                 safeReject(

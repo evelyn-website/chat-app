@@ -216,6 +216,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [optimistic]);
 
   const isSyncingHistoricalMessagesRef = useRef(false);
+  const syncGenerationRef = useRef(0);
   const lastRecoverySyncAttemptRef = useRef(0);
   const hasPendingSigningKeyRecoveryRef = useRef(false);
   const recoveryRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -258,12 +259,18 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       isSyncingHistoricalMessagesRef.current = true;
+      const generation = syncGenerationRef.current;
       dispatch({ type: "SET_LOADING", payload: true });
 
       try {
         const response = await http.get<RawMessage[]>(
           `${process.env.EXPO_PUBLIC_HOST}/ws/relevant-messages`
         );
+
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
+
         const rawMessages: RawMessage[] = response.data;
         const processedMessages: DbMessage[] = [];
         let skippedForMissingSigningKey = 0;
@@ -312,6 +319,10 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         await store.saveMessages(processedMessages, canReplaceSnapshot);
 
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
+
         // Mark that we've loaded historical messages at least once
         hasLoadedHistoricalMessagesRef.current = true;
 
@@ -323,6 +334,9 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
         refreshGroups();
       } catch (error) {
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
         if (!(error instanceof CanceledError)) {
           console.error(
             "loadHistoricalMessages: Failed to sync messages:",
@@ -330,6 +344,9 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           );
           try {
             const messages = await store.loadMessages();
+            if (syncGenerationRef.current !== generation) {
+              return;
+            }
             dispatch({ type: "SET_HISTORICAL_MESSAGES", payload: messages });
             dispatch({
               type: "SET_ERROR",
@@ -349,8 +366,10 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           console.log("loadHistoricalMessages: Sync operation was canceled.");
         }
       } finally {
-        dispatch({ type: "SET_LOADING", payload: false });
-        isSyncingHistoricalMessagesRef.current = false;
+        if (syncGenerationRef.current === generation) {
+          dispatch({ type: "SET_LOADING", payload: false });
+          isSyncingHistoricalMessagesRef.current = false;
+        }
       }
     },
     [
@@ -394,6 +413,7 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         return;
       }
+      const generation = syncGenerationRef.current;
 
       // Find optimistic message to extract client metadata
       const optimisticMsg = optimisticRef.current[rawMsg.group_id]?.find(
@@ -462,8 +482,16 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           });
         }
 
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
+
         dispatch({ type: "ADD_MESSAGE", payload: processedMessage });
         await store.saveMessages([processedMessage]);
+
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
 
         refreshGroups();
 
@@ -502,6 +530,8 @@ export const MessageStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const clearAllMessages = useCallback(() => {
+    syncGenerationRef.current += 1;
+    isSyncingHistoricalMessagesRef.current = false;
     dispatch({ type: "CLEAR_ALL" });
     setOptimistic({});
     optimisticRef.current = {};

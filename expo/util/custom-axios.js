@@ -35,12 +35,26 @@ http.interceptors.request.use(async (config) => {
     if (isTokenExpired(token)) {
       console.log("JWT is expired on client-side. Aborting request.");
       await clear("jwt");
+      if (logoutCallback) {
+        try {
+          logoutCallback();
+        } catch (callbackError) {
+          console.error("Error in logout callback:", callbackError);
+        }
+      }
       controller.abort();
     } else {
       config.headers["Authorization"] = `Bearer ${token}`;
     }
   } else {
     console.log("No JWT found. Aborting request.");
+    if (logoutCallback) {
+      try {
+        logoutCallback();
+      } catch (callbackError) {
+        console.error("Error in logout callback:", callbackError);
+      }
+    }
     controller.abort();
   }
 
