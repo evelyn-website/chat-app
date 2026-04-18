@@ -68,6 +68,11 @@ relevant_users AS (
     SELECT DISTINCT ug.user_id
     FROM user_groups ug
     JOIN user_target_groups utg ON ug.group_id = utg.group_id
+    UNION
+    -- Always include the requesting user so a fresh user with no groups
+    -- still gets their own device keys (needed to encrypt to themselves
+    -- when they create their first group).
+    SELECT $1::uuid
 )
 SELECT
     ru.user_id,
