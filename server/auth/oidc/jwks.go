@@ -45,8 +45,8 @@ type JWKS struct {
 	minRefresh time.Duration
 }
 
-// NewJWKS constructs a JWKS cache pointed at url. Call Start to run a
-// background refresh loop, or rely on lazy/on-miss fetching.
+// NewJWKS constructs a JWKS cache pointed at url. Call Refresh to prime or
+// manually update the cache, or rely on lazy/on-miss fetching via Get.
 func NewJWKS(url string, httpClient *http.Client) *JWKS {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
@@ -111,6 +111,9 @@ func (j *JWKS) refreshIfAllowed(ctx context.Context) error {
 		// Throttled — trust the snapshot.
 		return nil
 	}
+	// Stamp now before the attempt so repeated failures are also throttled.
+	// fetchLocked overwrites this on success with a fresh timestamp.
+	j.lastFetch.Store(time.Now().Unix())
 	return j.fetchLocked(ctx)
 }
 

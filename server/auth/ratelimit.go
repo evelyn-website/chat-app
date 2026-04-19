@@ -35,8 +35,10 @@ var (
 // c.ClientIP() trust is governed by gin.Engine.SetTrustedProxies, independent
 // of middleware ordering.
 var (
-	ipLimitersMu sync.Mutex
-	ipLimiters   = map[string]*limiter.Limiter{}
+	ipLimitersMu   sync.Mutex
+	ipLimiters     = map[string]*limiter.Limiter{}
+	userLimitersMu sync.Mutex
+	userLimiters   = map[string]*limiter.Limiter{}
 )
 
 func ipLimiterFor(rate string) *limiter.Limiter {
@@ -62,17 +64,28 @@ func RateLimitByIP(rate string) gin.HandlerFunc {
 	return mw.NewMiddleware(ipLimiterFor(rate))
 }
 
-// RateLimitByUser returns a middleware that rate-limits by authenticated
-// user_id. Must run AFTER JWTAuthMiddleware so the userID key is set in
-// context. Falls back to IP if for some reason userID isn't present (which
-// would indicate a misordered middleware chain).
-func RateLimitByUser(rate string) gin.HandlerFunc {
+func userLimiterFor(rate string) *limiter.Limiter {
+	userLimitersMu.Lock()
+	defer userLimitersMu.Unlock()
+	if lim, ok := userLimiters[rate]; ok {
+		return lim
+	}
 	r, err := limiter.NewRateFromFormatted(rate)
 	if err != nil {
 		panic("auth: invalid rate format " + rate + ": " + err.Error())
 	}
-	store := memstore.NewStore()
-	lim := limiter.New(store, r)
+	lim := limiter.New(memstore.NewStore(), r)
+	userLimiters[rate] = lim
+	return lim
+}
+
+// RateLimitByUser returns a middleware that rate-limits by authenticated
+// user_id. Must run AFTER JWTAuthMiddleware so the userID key is set in
+// context. Falls back to IP if for some reason userID isn't present (which
+// would indicate a misordered middleware chain). Limiters are memoized by
+// rate string so multiple endpoints sharing the same rate share one bucket.
+func RateLimitByUser(rate string) gin.HandlerFunc {
+	lim := userLimiterFor(rate)
 
 	return func(c *gin.Context) {
 		key := userKeyFromContext(c)
