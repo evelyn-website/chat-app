@@ -45,9 +45,10 @@ INSERT INTO users (
     full_name,
     given_name,
     family_name,
+    birthday,
     username_set
 ) VALUES (
-    $1, $2, $3, $4, $5, FALSE
+    $1, $2, $3, $4, $5, $6, FALSE
 )
 RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at;
 

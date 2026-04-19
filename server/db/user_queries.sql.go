@@ -552,9 +552,10 @@ INSERT INTO users (
     full_name,
     given_name,
     family_name,
+    birthday,
     username_set
 ) VALUES (
-    $1, $2, $3, $4, $5, FALSE
+    $1, $2, $3, $4, $5, $6, FALSE
 )
 RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at
 `
@@ -565,6 +566,7 @@ type InsertUserOIDCParams struct {
 	FullName   pgtype.Text `json:"full_name"`
 	GivenName  pgtype.Text `json:"given_name"`
 	FamilyName pgtype.Text `json:"family_name"`
+	Birthday   pgtype.Date `json:"birthday"`
 }
 
 type InsertUserOIDCRow struct {
@@ -589,6 +591,7 @@ func (q *Queries) InsertUserOIDC(ctx context.Context, arg InsertUserOIDCParams) 
 		arg.FullName,
 		arg.GivenName,
 		arg.FamilyName,
+		arg.Birthday,
 	)
 	var i InsertUserOIDCRow
 	err := row.Scan(

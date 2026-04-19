@@ -39,14 +39,18 @@ type LoginRequest struct {
 // opportunistic / best-effort: include it when available (Apple only vends it
 // once, on first sign-in) so the server can store an Apple refresh token for
 // account deletion via /auth/revoke. Omitting it never fails the sign-in.
+// AppleSignInRequest is the payload to POST /auth/apple. birthday is required
+// for first-time sign-ins (new account creation) and ignored for returning
+// users. Format: YYYY-MM-DD. The server enforces age ≥ 18 for new accounts.
 type AppleSignInRequest struct {
-	IDToken            string          `json:"id_token" binding:"required"`
-	AuthorizationCode  string          `json:"authorization_code"`
-	Nonce              string          `json:"nonce" binding:"required"`
-	DeviceIdentifier   string          `json:"device_identifier" binding:"required"`
-	PublicKey          string          `json:"public_key" binding:"required"`
-	SigningPublicKey   string          `json:"signing_public_key" binding:"required"`
-	FullName           *AppleFullName  `json:"full_name,omitempty"`
+	IDToken           string         `json:"id_token" binding:"required"`
+	AuthorizationCode string         `json:"authorization_code"`
+	Nonce             string         `json:"nonce" binding:"required"`
+	DeviceIdentifier  string         `json:"device_identifier" binding:"required"`
+	PublicKey         string         `json:"public_key" binding:"required"`
+	SigningPublicKey   string         `json:"signing_public_key" binding:"required"`
+	FullName          *AppleFullName `json:"full_name,omitempty"`
+	Birthday          string         `json:"birthday"`
 }
 
 type AppleFullName struct {

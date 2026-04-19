@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"chat-app-server/auth/apple"
 	"chat-app-server/auth/oidc"
@@ -50,6 +52,29 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 		return
 	}
 
+	// Parse and age-check birthday before touching the DB. Birthday is only
+	// required for new accounts; we can't know that yet, so we validate format
+	// and age now and enforce presence later (after findOrCreateAppleUser tells
+	// us whether this is a first-time sign-in).
+	var birthday *time.Time
+	if req.Birthday != "" {
+		bd, err := time.Parse("2006-01-02", req.Birthday)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid birthday format, expected YYYY-MM-DD"})
+			return
+		}
+		now := time.Now()
+		age := now.Year() - bd.Year()
+		if now.Month() < bd.Month() || (now.Month() == bd.Month() && now.Day() < bd.Day()) {
+			age--
+		}
+		if age < 18 {
+			c.JSON(http.StatusForbidden, gin.H{"message": "You must be 18 or older to use this app."})
+			return
+		}
+		birthday = &bd
+	}
+
 	// Decode device keys up front; if they're malformed the whole sign-in is
 	// rejected before we touch the DB.
 	pubKey, err := base64.StdEncoding.DecodeString(req.PublicKey)
@@ -76,7 +101,11 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 	defer tx.Rollback(ctx)
 	qtx := h.db.WithTx(tx)
 
-	userID, identityID, isNew, err := findOrCreateAppleUser(ctx, qtx, claims, req.FullName)
+	userID, identityID, isNew, err := findOrCreateAppleUser(ctx, qtx, claims, req.FullName, birthday)
+	if errors.Is(err, errBirthdayRequired) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "birthday is required for new accounts (YYYY-MM-DD)"})
+		return
+	}
 	if err != nil {
 		log.Printf("AppleSignIn: findOrCreateUser: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
@@ -148,10 +177,15 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 	})
 }
 
+// errBirthdayRequired is returned by findOrCreateAppleUser when a new account
+// is being created but no birthday was supplied. Maps to HTTP 400.
+var errBirthdayRequired = fmt.Errorf("birthday required for new account")
+
 // findOrCreateAppleUser implements plan.md §9.3/§9.4. It either looks up an
 // existing user by (provider, subject) or creates a new user+identity pair.
 // fullName is captured only on the first-ever sign-in per identity (Apple
-// only returns it once).
+// only returns it once). birthday must be non-nil for new accounts; it is
+// ignored for returning users.
 //
 // Returns (userID, identityID, isNew, error).
 func findOrCreateAppleUser(
@@ -159,6 +193,7 @@ func findOrCreateAppleUser(
 	qtx *db.Queries,
 	claims *oidc.Claims,
 	fullName *AppleFullName,
+	birthday *time.Time,
 ) (uuid.UUID, uuid.UUID, bool, error) {
 	existing, err := qtx.GetAuthIdentity(ctx, db.GetAuthIdentityParams{
 		Provider: claims.Provider,
@@ -181,9 +216,13 @@ func findOrCreateAppleUser(
 		return uuid.Nil, uuid.Nil, false, err
 	}
 
-	// First-ever sign-in for this identity. Create a user with a random
-	// placeholder username (username_set=false bypasses the partial unique
-	// index, so placeholders can't collide).
+	// First-ever sign-in for this identity.
+	if birthday == nil {
+		return uuid.Nil, uuid.Nil, false, errBirthdayRequired
+	}
+
+	// Create a user with a random placeholder username (username_set=false
+	// bypasses the partial unique index, so placeholders can't collide).
 	placeholder, err := randomPlaceholderUsername()
 	if err != nil {
 		return uuid.Nil, uuid.Nil, false, err
@@ -216,6 +255,7 @@ func findOrCreateAppleUser(
 		FullName:   fullNameText,
 		GivenName:  givenNameText,
 		FamilyName: familyNameText,
+		Birthday:   pgtype.Date{Time: *birthday, Valid: true},
 	})
 	if err != nil {
 		return uuid.Nil, uuid.Nil, false, err
