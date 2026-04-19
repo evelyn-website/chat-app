@@ -3,9 +3,10 @@ package oidc
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -49,8 +50,7 @@ func (v *AppleVerifier) WithJWKS(j *JWKS) *AppleVerifier {
 }
 
 // Verify parses and validates the id_token. rawNonce is the pre-image the
-// client used; Apple receives the sha256 hash of rawNonce, so we compare to
-// the hashed form before base64url-encoding.
+// client used; pass the raw string, not the digest.
 func (v *AppleVerifier) Verify(ctx context.Context, rawIDToken string, rawNonce string) (*Claims, error) {
 	if rawIDToken == "" {
 		return nil, ErrMalformedToken
@@ -112,18 +112,20 @@ func (v *AppleVerifier) Verify(ctx context.Context, rawIDToken string, rawNonce 
 		return nil, ErrMissingSubject
 	}
 
-	// nonce — Apple puts base64url(sha256(rawNonce)) in the id_token claim.
-	// rawNonce is the pre-hash random string the client sends to our server;
-	// it must NOT be the digest. Client side: expo-crypto.digestStringAsync
-	// returns hex by default, so convert before passing to Apple's auth
-	// request: Buffer.from(hexDigest, 'hex').toString('base64url').
+	// nonce — Apple echoes the hash the client passed verbatim in the id_token
+	// claim, so the server must compute the same encoding. We use lowercase hex
+	// because expo-crypto.digestStringAsync(SHA256) outputs hex by default,
+	// meaning the client can pass the digest straight to AppleAuthentication
+	// without conversion. Compare case-insensitively in case a future client
+	// or provider normalises capitalisation differently.
+	// rawNonce here is the pre-hash string, not the digest.
 	// We only validate when rawNonce is non-empty; omitting it skips the check
 	// for legacy SIWA flows. Current plan always supplies a nonce.
 	if rawNonce != "" {
 		expectedHash := sha256.Sum256([]byte(rawNonce))
-		expected := base64.RawURLEncoding.EncodeToString(expectedHash[:])
+		expected := hex.EncodeToString(expectedHash[:])
 		got, _ := claims["nonce"].(string)
-		if got == "" || got != expected {
+		if got == "" || !strings.EqualFold(got, expected) {
 			return nil, ErrNonceMismatch
 		}
 	}

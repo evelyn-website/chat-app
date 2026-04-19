@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -111,7 +112,7 @@ func (r *testRig) mint(opts tokenOpts) string {
 
 func hashedNonce(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:])
 }
 
 func TestAppleVerifier_HappyPath(t *testing.T) {
