@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -26,24 +27,39 @@ var (
 	RateAuthenticatedPerUser = "10-M"
 )
 
-// rateByIP constructs a per-IP limiter for one of the public auth endpoints.
-// gin-contrib's cors middleware already ran by the time we reach these, so
-// c.ClientIP() honors X-Forwarded-For from our trusted proxy set.
-func rateByIP(rate string) gin.HandlerFunc {
+// ipLimiters memoizes per-IP limiters by rate string so endpoints sharing a
+// budget share a bucket. Without this, RateLimitByIP(RateSignInPerIP) applied
+// to three sign-in endpoints would give each IP 3x the intended budget across
+// the sign-in surface.
+//
+// c.ClientIP() trust is governed by gin.Engine.SetTrustedProxies, independent
+// of middleware ordering.
+var (
+	ipLimitersMu sync.Mutex
+	ipLimiters   = map[string]*limiter.Limiter{}
+)
+
+func ipLimiterFor(rate string) *limiter.Limiter {
+	ipLimitersMu.Lock()
+	defer ipLimitersMu.Unlock()
+	if lim, ok := ipLimiters[rate]; ok {
+		return lim
+	}
 	r, err := limiter.NewRateFromFormatted(rate)
 	if err != nil {
 		// Misconfigured code path — fail loud at startup.
 		panic("auth: invalid rate format " + rate + ": " + err.Error())
 	}
-	store := memstore.NewStore()
-	lim := limiter.New(store, r)
-	return mw.NewMiddleware(lim)
+	lim := limiter.New(memstore.NewStore(), r)
+	ipLimiters[rate] = lim
+	return lim
 }
 
 // RateLimitByIP returns a middleware that rate-limits the current request's
-// client IP against the given token-bucket budget.
+// client IP against the given token-bucket budget. Limiters are memoized by
+// rate string, so multiple endpoints sharing the same rate share one bucket.
 func RateLimitByIP(rate string) gin.HandlerFunc {
-	return rateByIP(rate)
+	return mw.NewMiddleware(ipLimiterFor(rate))
 }
 
 // RateLimitByUser returns a middleware that rate-limits by authenticated

@@ -112,10 +112,13 @@ func (v *AppleVerifier) Verify(ctx context.Context, rawIDToken string, rawNonce 
 		return nil, ErrMissingSubject
 	}
 
-	// nonce — Apple stores the sha256 of the client-supplied raw nonce, base64url
-	// (unpadded). We only check when a rawNonce is supplied; SIWA flows that
-	// predate nonce enforcement would otherwise fail closed. Current plan
-	// always supplies a nonce, so this check is effectively always on in prod.
+	// nonce — Apple puts base64url(sha256(rawNonce)) in the id_token claim.
+	// rawNonce is the pre-hash random string the client sends to our server;
+	// it must NOT be the digest. Client side: expo-crypto.digestStringAsync
+	// returns hex by default, so convert before passing to Apple's auth
+	// request: Buffer.from(hexDigest, 'hex').toString('base64url').
+	// We only validate when rawNonce is non-empty; omitting it skips the check
+	// for legacy SIWA flows. Current plan always supplies a nonce.
 	if rawNonce != "" {
 		expectedHash := sha256.Sum256([]byte(rawNonce))
 		expected := base64.RawURLEncoding.EncodeToString(expectedHash[:])

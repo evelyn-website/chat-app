@@ -95,7 +95,7 @@ func TestBuildClientSecret_MissingFields(t *testing.T) {
 		{"no team", ClientSecretConfig{KeyID: "K", ServicesID: "S", PrivateKey: key}},
 		{"no key", ClientSecretConfig{TeamID: "T", ServicesID: "S", PrivateKey: key}},
 		{"no services", ClientSecretConfig{TeamID: "T", KeyID: "K", PrivateKey: key}},
-		{"no key", ClientSecretConfig{TeamID: "T", KeyID: "K", ServicesID: "S"}},
+		{"no private key", ClientSecretConfig{TeamID: "T", KeyID: "K", ServicesID: "S"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

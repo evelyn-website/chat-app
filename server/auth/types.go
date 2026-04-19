@@ -36,8 +36,9 @@ type LoginRequest struct {
 }
 
 // AppleSignInRequest is the payload to POST /auth/apple. authorization_code is
-// required on the first-ever sign-in per identity (for Apple /auth/revoke on
-// account deletion); subsequent sign-ins can include it opportunistically.
+// opportunistic / best-effort: include it when available (Apple only vends it
+// once, on first sign-in) so the server can store an Apple refresh token for
+// account deletion via /auth/revoke. Omitting it never fails the sign-in.
 type AppleSignInRequest struct {
 	IDToken            string          `json:"id_token" binding:"required"`
 	AuthorizationCode  string          `json:"authorization_code"`

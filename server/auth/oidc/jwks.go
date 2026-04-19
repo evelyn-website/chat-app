@@ -105,9 +105,9 @@ func (j *JWKS) refreshIfAllowed(ctx context.Context) error {
 	defer j.fetchMu.Unlock()
 
 	// Re-check after taking the lock: another goroutine may have fetched while
-	// we were blocked.
-	last := time.Unix(j.lastFetch.Load(), 0)
-	if !last.IsZero() && time.Since(last) < j.minRefresh {
+	// we were blocked. ts==0 means never fetched; time.Unix(0,0) is 1970 and
+	// IsZero() returns false for it, so check ts explicitly.
+	if ts := j.lastFetch.Load(); ts != 0 && time.Since(time.Unix(ts, 0)) < j.minRefresh {
 		// Throttled — trust the snapshot.
 		return nil
 	}
@@ -149,6 +149,12 @@ func (j *JWKS) fetchLocked(ctx context.Context) error {
 		parsed[k.Kid] = pub
 	}
 
+	if len(parsed) == 0 {
+		// Preserve the previous good snapshot rather than wiping it; a CDN hiccup
+		// or truncated JSON shouldn't lock verification into ErrUnknownKeyID for
+		// the full minRefresh window.
+		return fmt.Errorf("jwks refresh: no usable keys parsed from %d entries", len(set.Keys))
+	}
 	j.keys.Store(&parsed)
 	j.lastFetch.Store(time.Now().Unix())
 	return nil

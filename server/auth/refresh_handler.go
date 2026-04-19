@@ -80,10 +80,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	if err := h.refresh.Revoke(ctx, req.RefreshToken); err != nil {
-		// Internal errors only — Revoke already swallows not-found / already-revoked.
-		log.Printf("Logout: revoke error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Logout failed"})
-		return
+		// Revoke swallows not-found / already-revoked; any error here is internal.
+		// Log it but still return 204 — logout is idempotent by contract.
+		log.Printf("Logout: revoke error (non-fatal): %v", err)
 	}
 	c.Status(http.StatusNoContent)
 }

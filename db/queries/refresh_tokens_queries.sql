@@ -20,15 +20,19 @@ SELECT *
 FROM refresh_tokens
 WHERE id = $1;
 
--- name: RotateRefreshToken :exec
+-- name: RotateRefreshToken :execrows
 -- Marks the old row revoked and links it to the newly-issued replacement.
 -- Callers must run this inside the same tx that inserts the new row so a
--- failure rolls back both.
+-- failure rolls back both. The `revoked_at IS NULL` guard defeats a concurrent
+-- rotation race: if two requests present the same plaintext simultaneously,
+-- only one update lands; the loser sees 0 affected rows and the caller treats
+-- that as theft (the token was consumed between our SELECT and UPDATE).
 UPDATE refresh_tokens
 SET revoked_at = NOW(),
     replaced_by = $2,
     last_used_at = NOW()
-WHERE id = $1;
+WHERE id = $1
+  AND revoked_at IS NULL;
 
 -- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens

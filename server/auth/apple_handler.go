@@ -96,18 +96,6 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 		return
 	}
 
-	// Opportunistic authorization_code exchange. Only run if:
-	//   - Apple client + encryption key are both configured, AND
-	//   - The client actually supplied a code, AND
-	//   - We don't already hold an encrypted Apple refresh token for this
-	//     identity (codes are one-time-use; a redundant exchange would fail).
-	//
-	// Any failure here is logged but non-fatal: the user can still sign in;
-	// only the "delete account via Apple revoke" capability is degraded.
-	if err := h.maybeExchangeAppleCode(ctx, qtx, identityID, req.AuthorizationCode); err != nil {
-		log.Printf("AppleSignIn: apple code exchange (user=%s): %v", userID, err)
-	}
-
 	// Issue refresh token in-tx.
 	refreshPlain, err := h.refresh.IssueTx(ctx, qtx, userID, req.DeviceIdentifier, c.Request.UserAgent())
 	if err != nil {
@@ -120,6 +108,16 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 		log.Printf("AppleSignIn: commit: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
 		return
+	}
+
+	// Opportunistic authorization_code exchange runs AFTER commit so the
+	// critical sign-in path doesn't hold a pooled DB connection while waiting
+	// on Apple's /auth/token (10s timeout). Any failure here is logged but
+	// non-fatal: the user can still sign in; only the "delete account via Apple
+	// revoke" capability is degraded. A redundant exchange on the client's next
+	// retry is harmless — GetAppleRefreshTokenEncrypted guards the idempotency.
+	if err := h.maybeExchangeAppleCode(ctx, identityID, req.AuthorizationCode); err != nil {
+		log.Printf("AppleSignIn: apple code exchange (user=%s): %v", userID, err)
 	}
 
 	// Post-commit: mint the access token and hydrate the response with whatever
@@ -256,11 +254,13 @@ func randomPlaceholderUsername() (string, error) {
 	return "user_" + hex.EncodeToString(buf), nil
 }
 
-// maybeExchangeAppleCode runs the /auth/token grant when appropriate. See the
-// docstring on AppleSignIn for the gating conditions.
+// maybeExchangeAppleCode runs the /auth/token grant when appropriate. Called
+// post-commit so the HTTP round-trip to Apple doesn't hold a DB connection.
+// Uses h.db directly (not a caller-supplied tx) to avoid pinning the sign-in
+// transaction. Not-configured is a silent nil, not an error — dev envs without
+// Apple S2S wiring would otherwise log a spurious error on every sign-in.
 func (h *AuthHandler) maybeExchangeAppleCode(
 	ctx context.Context,
-	qtx *db.Queries,
 	identityID uuid.UUID,
 	authorizationCode string,
 ) error {
@@ -268,10 +268,10 @@ func (h *AuthHandler) maybeExchangeAppleCode(
 		return nil
 	}
 	if h.appleClient == nil || h.appleEncKey == nil {
-		return errors.New("apple client or encryption key not configured; skipping exchange")
+		return nil
 	}
 
-	existing, err := qtx.GetAppleRefreshTokenEncrypted(ctx, identityID)
+	existing, err := h.db.GetAppleRefreshTokenEncrypted(ctx, identityID)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (h *AuthHandler) maybeExchangeAppleCode(
 	if err != nil {
 		return err
 	}
-	return qtx.SetAppleRefreshTokenEncrypted(ctx, db.SetAppleRefreshTokenEncryptedParams{
+	return h.db.SetAppleRefreshTokenEncrypted(ctx, db.SetAppleRefreshTokenEncryptedParams{
 		ID:                         identityID,
 		AppleRefreshTokenEncrypted: blob,
 	})

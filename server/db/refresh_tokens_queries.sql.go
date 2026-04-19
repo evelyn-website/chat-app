@@ -258,12 +258,13 @@ func (q *Queries) RevokeRefreshTokenFamily(ctx context.Context, id uuid.UUID) er
 	return err
 }
 
-const rotateRefreshToken = `-- name: RotateRefreshToken :exec
+const rotateRefreshToken = `-- name: RotateRefreshToken :execrows
 UPDATE refresh_tokens
 SET revoked_at = NOW(),
     replaced_by = $2,
     last_used_at = NOW()
 WHERE id = $1
+  AND revoked_at IS NULL
 `
 
 type RotateRefreshTokenParams struct {
@@ -273,8 +274,14 @@ type RotateRefreshTokenParams struct {
 
 // Marks the old row revoked and links it to the newly-issued replacement.
 // Callers must run this inside the same tx that inserts the new row so a
-// failure rolls back both.
-func (q *Queries) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, rotateRefreshToken, arg.ID, arg.ReplacedBy)
-	return err
+// failure rolls back both. The `revoked_at IS NULL` guard defeats a concurrent
+// rotation race: if two requests present the same plaintext simultaneously,
+// only one update lands; the loser sees 0 affected rows and the caller treats
+// that as theft (the token was consumed between our SELECT and UPDATE).
+func (q *Queries) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rotateRefreshToken, arg.ID, arg.ReplacedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

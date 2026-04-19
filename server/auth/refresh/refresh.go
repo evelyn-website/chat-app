@@ -189,11 +189,23 @@ func (s *Store) Rotate(ctx context.Context, presentedPlaintext, deviceIdentifier
 	}
 
 	newRowID := newRow.ID
-	if err := qtx.RotateRefreshToken(ctx, db.RotateRefreshTokenParams{
+	affected, err := qtx.RotateRefreshToken(ctx, db.RotateRefreshTokenParams{
 		ID:         row.ID,
 		ReplacedBy: &newRowID,
-	}); err != nil {
+	})
+	if err != nil {
 		return RotateResult{}, fmt.Errorf("mark old rotated: %w", err)
+	}
+	if affected == 0 {
+		// Another goroutine rotated this row between our SELECT and UPDATE —
+		// i.e., the same plaintext was presented concurrently. Treat it as
+		// theft: drop our not-yet-committed replacement, then revoke the whole
+		// family in a fresh transaction.
+		_ = tx.Rollback(ctx)
+		if err := s.queries.RevokeRefreshTokenFamily(ctx, row.ID); err != nil {
+			return RotateResult{}, fmt.Errorf("family revoke after race: %w", err)
+		}
+		return RotateResult{}, ErrTheftDetected
 	}
 
 	if err := tx.Commit(ctx); err != nil {

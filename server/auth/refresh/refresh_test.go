@@ -18,7 +18,7 @@ import (
 // the partial indexes, NULL semantics, and transaction guarantees Postgres
 // provides. They run inside `docker compose exec go-server go test` where
 // DB_URL is configured; skip outside that environment.
-func newTestStore(t *testing.T) (*Store, *db.Queries, func()) {
+func newTestStore(t *testing.T) (*Store, *db.Queries) {
 	t.Helper()
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
@@ -29,9 +29,9 @@ func newTestStore(t *testing.T) (*Store, *db.Queries, func()) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
+	t.Cleanup(pool.Close)
 	q := db.New(pool)
-	cleanup := func() { pool.Close() }
-	return NewStore(q, pool), q, cleanup
+	return NewStore(q, pool), q
 }
 
 // insertTestUser creates a user row we can attach refresh tokens to. The
@@ -56,8 +56,7 @@ func insertTestUser(t *testing.T, q *db.Queries) uuid.UUID {
 }
 
 func TestRotate_HappyPath(t *testing.T) {
-	store, q, cleanup := newTestStore(t)
-	defer cleanup()
+	store, q := newTestStore(t)
 	ctx := context.Background()
 
 	userID := insertTestUser(t, q)
@@ -89,8 +88,7 @@ func TestRotate_HappyPath(t *testing.T) {
 // again. That row has revoked_at != NULL AND replaced_by != NULL. We must
 // react by revoking the entire family and rejecting the request.
 func TestRotate_TheftDetection(t *testing.T) {
-	store, q, cleanup := newTestStore(t)
-	defer cleanup()
+	store, q := newTestStore(t)
 	ctx := context.Background()
 
 	userID := insertTestUser(t, q)
@@ -121,8 +119,7 @@ func TestRotate_TheftDetection(t *testing.T) {
 }
 
 func TestRotate_DeviceMismatch(t *testing.T) {
-	store, q, cleanup := newTestStore(t)
-	defer cleanup()
+	store, q := newTestStore(t)
 	ctx := context.Background()
 
 	userID := insertTestUser(t, q)
@@ -137,8 +134,7 @@ func TestRotate_DeviceMismatch(t *testing.T) {
 }
 
 func TestRotate_Unknown(t *testing.T) {
-	store, _, cleanup := newTestStore(t)
-	defer cleanup()
+	store, _ := newTestStore(t)
 	ctx := context.Background()
 
 	// A random token that was never issued.
@@ -153,8 +149,7 @@ func TestRotate_Unknown(t *testing.T) {
 }
 
 func TestRotate_Expired(t *testing.T) {
-	store, q, cleanup := newTestStore(t)
-	defer cleanup()
+	store, q := newTestStore(t)
 	ctx := context.Background()
 
 	userID := insertTestUser(t, q)
@@ -182,8 +177,7 @@ func TestRotate_Expired(t *testing.T) {
 }
 
 func TestRevoke_Idempotent(t *testing.T) {
-	store, q, cleanup := newTestStore(t)
-	defer cleanup()
+	store, q := newTestStore(t)
 	ctx := context.Background()
 
 	userID := insertTestUser(t, q)

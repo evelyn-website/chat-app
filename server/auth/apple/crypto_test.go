@@ -8,11 +8,17 @@ import (
 	"testing"
 )
 
-func TestEncryptDecrypt_RoundTrip(t *testing.T) {
+func randomKey(t *testing.T) []byte {
+	t.Helper()
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
+	return key
+}
+
+func TestEncryptDecrypt_RoundTrip(t *testing.T) {
+	key := randomKey(t)
 	plain := []byte("r.apple.refresh.token.value")
 	blob, err := Encrypt(key, plain)
 	if err != nil {
@@ -31,19 +37,26 @@ func TestEncryptDecrypt_RoundTrip(t *testing.T) {
 }
 
 func TestEncrypt_NonceChangesPerCall(t *testing.T) {
-	key := make([]byte, 32)
-	_, _ = rand.Read(key)
-	a, _ := Encrypt(key, []byte("same"))
-	b, _ := Encrypt(key, []byte("same"))
+	key := randomKey(t)
+	a, err := Encrypt(key, []byte("same"))
+	if err != nil {
+		t.Fatalf("encrypt a: %v", err)
+	}
+	b, err := Encrypt(key, []byte("same"))
+	if err != nil {
+		t.Fatalf("encrypt b: %v", err)
+	}
 	if bytes.Equal(a, b) {
 		t.Fatal("two encryptions of the same plaintext produced identical blobs (nonce reuse)")
 	}
 }
 
 func TestDecrypt_TamperedBlob(t *testing.T) {
-	key := make([]byte, 32)
-	_, _ = rand.Read(key)
-	blob, _ := Encrypt(key, []byte("secret"))
+	key := randomKey(t)
+	blob, err := Encrypt(key, []byte("secret"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
 	blob[len(blob)-1] ^= 0x01 // flip last byte — lives inside the GCM tag
 	if _, err := Decrypt(key, blob); err == nil {
 		t.Fatal("decrypt accepted tampered ciphertext")
@@ -51,10 +64,11 @@ func TestDecrypt_TamperedBlob(t *testing.T) {
 }
 
 func TestDecrypt_WrongKey(t *testing.T) {
-	k1, k2 := make([]byte, 32), make([]byte, 32)
-	_, _ = rand.Read(k1)
-	_, _ = rand.Read(k2)
-	blob, _ := Encrypt(k1, []byte("secret"))
+	k1, k2 := randomKey(t), randomKey(t)
+	blob, err := Encrypt(k1, []byte("secret"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
 	if _, err := Decrypt(k2, blob); err == nil {
 		t.Fatal("decrypt accepted blob with wrong key")
 	}
@@ -62,8 +76,7 @@ func TestDecrypt_WrongKey(t *testing.T) {
 
 func TestLoadEncryptionKey(t *testing.T) {
 	// Valid
-	key := make([]byte, 32)
-	_, _ = rand.Read(key)
+	key := randomKey(t)
 	t.Setenv(EncryptionKeyEnvVar, base64.StdEncoding.EncodeToString(key))
 	got, err := LoadEncryptionKey()
 	if err != nil {
