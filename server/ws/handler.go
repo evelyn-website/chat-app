@@ -117,8 +117,19 @@ func (h *Handler) EstablishConnection(c *gin.Context) {
 				conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Missing device identifier"))
 				return
 			}
-			extractedUserID, validationErr := auth.ValidateToken(authMsg.Token)
+			validated, validationErr := auth.ValidateToken(authMsg.Token)
 			if validationErr == nil {
+				extractedUserID := validated.UserID
+				// Per plan §2.1, defense-in-depth: the device_identifier in the
+				// auth frame must match the `did` claim in the JWT. An
+				// unclaimed did (legacy token, cutover window) is tolerated.
+				if validated.DeviceID != "" && validated.DeviceID != authMsg.DeviceIdentifier {
+					log.Printf("Auth failed: device mismatch — jwt did=%q frame did=%q user=%s", validated.DeviceID, authMsg.DeviceIdentifier, extractedUserID)
+					response := ServerResponseMessage{Type: "auth_failure", Error: "Device identifier does not match token."}
+					conn.WriteJSON(response)
+					conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Device mismatch"))
+					return
+				}
 				fetchedUser, dbErr := h.db.GetUserById(requestCtx, extractedUserID)
 				if dbErr == nil {
 					deviceKey, keyErr := h.db.GetDeviceKeyByIdentifier(requestCtx, db.GetDeviceKeyByIdentifierParams{
@@ -434,7 +445,7 @@ func (h *Handler) InviteUsersToGroup(c *gin.Context) {
 		}
 		if hasConflict {
 			log.Printf("Skipping invite for user %s to group %s due to block conflict", user.ID, req.GroupID)
-			skippedUsers = append(skippedUsers, user.Email)
+			skippedUsers = append(skippedUsers, user.Email.String)
 			continue
 		}
 

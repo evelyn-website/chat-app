@@ -42,7 +42,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		userID, err := ValidateToken(tokenString)
+		validated, err := ValidateToken(tokenString)
 
 		if err != nil {
 			var statusCode int
@@ -71,7 +71,8 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userID", userID)
+		c.Set("userID", validated.UserID)
+		c.Set("deviceID", validated.DeviceID)
 
 		c.Next()
 	}

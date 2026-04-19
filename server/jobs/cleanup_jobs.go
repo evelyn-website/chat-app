@@ -373,6 +373,33 @@ func (j *CleanupStaleDeviceKeysJob) Execute(ctx context.Context) error {
 	return nil
 }
 
+// CleanupStaleRefreshTokensJob deletes refresh_tokens rows that expired or were
+// revoked more than 30 days ago. The 30-day window preserves a forensic tail
+// for theft investigations; tune later.
+type CleanupStaleRefreshTokensJob struct {
+	BaseJob
+}
+
+func (j *CleanupStaleRefreshTokensJob) Name() string {
+	return "cleanup_stale_refresh_tokens"
+}
+
+func (j *CleanupStaleRefreshTokensJob) Schedule() string {
+	return "0 2 * * *" // Daily at 2 AM UTC
+}
+
+func (j *CleanupStaleRefreshTokensJob) LockTimeout() time.Duration {
+	return 5 * time.Minute
+}
+
+func (j *CleanupStaleRefreshTokensJob) Execute(ctx context.Context) error {
+	if err := j.db.DeleteStaleRefreshTokens(ctx); err != nil {
+		return fmt.Errorf("failed to delete stale refresh tokens: %w", err)
+	}
+	log.Printf("Job %s: Deleted stale refresh tokens", j.Name())
+	return nil
+}
+
 // ProcessPushReceiptsJob checks pending push notification receipts and removes invalid tokens
 type ProcessPushReceiptsJob struct {
 	BaseJob

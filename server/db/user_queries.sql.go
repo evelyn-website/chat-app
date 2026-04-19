@@ -20,7 +20,7 @@ WHERE id = $1 RETURNING "id", "username", "email", "created_at", "updated_at"
 type DeleteUserRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -45,7 +45,7 @@ SELECT "id", "username", "email", "created_at", "updated_at" FROM users
 type GetAllUsersRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -127,7 +127,7 @@ SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM us
 type GetAllUsersInternalRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	Password  pgtype.Text      `json:"password"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
@@ -235,7 +235,7 @@ GROUP BY u.id
 type GetRelevantUsersRow struct {
 	ID            uuid.UUID        `json:"id"`
 	Username      string           `json:"username"`
-	Email         string           `json:"email"`
+	Email         pgtype.Text      `json:"email"`
 	CreatedAt     pgtype.Timestamp `json:"created_at"`
 	GroupAdminMap string           `json:"group_admin_map"`
 }
@@ -273,7 +273,7 @@ SELECT "id", "username", "email", "created_at", "updated_at" FROM users WHERE LO
 type GetUserByEmailRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -298,7 +298,7 @@ SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM us
 type GetUserByEmailInternalRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	Password  pgtype.Text      `json:"password"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
@@ -325,7 +325,7 @@ SELECT "id", "username", "email", "created_at", "updated_at" FROM users WHERE id
 type GetUserByIdRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -350,7 +350,7 @@ SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM us
 type GetUserByIdInternalRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	Password  pgtype.Text      `json:"password"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
@@ -377,7 +377,7 @@ SELECT "id", "username", "email", "created_at", "updated_at" FROM users WHERE us
 type GetUserByUsernameRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -395,6 +395,43 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUs
 	return i, err
 }
 
+const getUserIdentityFields = `-- name: GetUserIdentityFields :one
+SELECT id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at
+FROM users
+WHERE id = $1
+`
+
+type GetUserIdentityFieldsRow struct {
+	ID          uuid.UUID        `json:"id"`
+	Username    string           `json:"username"`
+	Email       pgtype.Text      `json:"email"`
+	FullName    pgtype.Text      `json:"full_name"`
+	GivenName   pgtype.Text      `json:"given_name"`
+	FamilyName  pgtype.Text      `json:"family_name"`
+	UsernameSet bool             `json:"username_set"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+}
+
+// Used by /whoami to hydrate the client with name + username_set after a
+// cold launch or refresh.
+func (q *Queries) GetUserIdentityFields(ctx context.Context, id uuid.UUID) (GetUserIdentityFieldsRow, error) {
+	row := q.db.QueryRow(ctx, getUserIdentityFields, id)
+	var i GetUserIdentityFieldsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.FullName,
+		&i.GivenName,
+		&i.FamilyName,
+		&i.UsernameSet,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUsersByEmails = `-- name: GetUsersByEmails :many
 SELECT id, username, email, created_at, updated_at FROM users WHERE email = ANY($1::text[])
 `
@@ -402,7 +439,7 @@ SELECT id, username, email, created_at, updated_at FROM users WHERE email = ANY(
 type GetUsersByEmailsRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -440,7 +477,7 @@ SELECT id, username, email, created_at, updated_at FROM users WHERE id = ANY($1:
 type GetUsersByIDsRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -477,7 +514,7 @@ INSERT INTO users (username, email, password, birthday) VALUES ($1, $2, $3, $4) 
 
 type InsertUserParams struct {
 	Username string      `json:"username"`
-	Email    string      `json:"email"`
+	Email    pgtype.Text `json:"email"`
 	Password pgtype.Text `json:"password"`
 	Birthday pgtype.Date `json:"birthday"`
 }
@@ -485,7 +522,7 @@ type InsertUserParams struct {
 type InsertUserRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }
@@ -502,6 +539,109 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertU
 		&i.ID,
 		&i.Username,
 		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertUserOIDC = `-- name: InsertUserOIDC :one
+INSERT INTO users (
+    username,
+    email,
+    full_name,
+    given_name,
+    family_name,
+    username_set
+) VALUES (
+    $1, $2, $3, $4, $5, FALSE
+)
+RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at
+`
+
+type InsertUserOIDCParams struct {
+	Username   string      `json:"username"`
+	Email      pgtype.Text `json:"email"`
+	FullName   pgtype.Text `json:"full_name"`
+	GivenName  pgtype.Text `json:"given_name"`
+	FamilyName pgtype.Text `json:"family_name"`
+}
+
+type InsertUserOIDCRow struct {
+	ID          uuid.UUID        `json:"id"`
+	Username    string           `json:"username"`
+	Email       pgtype.Text      `json:"email"`
+	FullName    pgtype.Text      `json:"full_name"`
+	GivenName   pgtype.Text      `json:"given_name"`
+	FamilyName  pgtype.Text      `json:"family_name"`
+	UsernameSet bool             `json:"username_set"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+}
+
+// Creates a user row for an OIDC sign-in. `username` is a placeholder
+// (username_set=false). The user picks a real handle via POST /api/users/username
+// before being routed into the app.
+func (q *Queries) InsertUserOIDC(ctx context.Context, arg InsertUserOIDCParams) (InsertUserOIDCRow, error) {
+	row := q.db.QueryRow(ctx, insertUserOIDC,
+		arg.Username,
+		arg.Email,
+		arg.FullName,
+		arg.GivenName,
+		arg.FamilyName,
+	)
+	var i InsertUserOIDCRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.FullName,
+		&i.GivenName,
+		&i.FamilyName,
+		&i.UsernameSet,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setUsername = `-- name: SetUsername :one
+UPDATE users
+SET username = $2,
+    username_set = TRUE,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, username, email, full_name, username_set, created_at, updated_at
+`
+
+type SetUsernameParams struct {
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+}
+
+type SetUsernameRow struct {
+	ID          uuid.UUID        `json:"id"`
+	Username    string           `json:"username"`
+	Email       pgtype.Text      `json:"email"`
+	FullName    pgtype.Text      `json:"full_name"`
+	UsernameSet bool             `json:"username_set"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+}
+
+// Atomic username pick. The partial unique index on LOWER(username) WHERE
+// username_set=TRUE handles the race between two users claiming the same
+// handle concurrently — the loser gets a unique-violation error, which the
+// handler maps to 409.
+func (q *Queries) SetUsername(ctx context.Context, arg SetUsernameParams) (SetUsernameRow, error) {
+	row := q.db.QueryRow(ctx, setUsername, arg.ID, arg.Username)
+	var i SetUsernameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.FullName,
+		&i.UsernameSet,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -526,7 +666,7 @@ type UpdateUserParams struct {
 type UpdateUserRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 }

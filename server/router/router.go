@@ -51,9 +51,16 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	r.GET("/public/invites/:code", wsHandler.ValidateInvite)
 
 	// auth routes group
+	// auth routes group. Per plan §2.6 the public endpoints are rate-limited
+	// per-IP with token buckets sized to the sensitivity of each operation:
+	// sign-in creates users, refresh is a credential-stuffing target, logout
+	// is low-risk but rate-limited for hygiene.
 	authRoutes := r.Group("/auth/")
-	authRoutes.POST("/signup", authHandler.Signup)
-	authRoutes.POST("/login", authHandler.Login)
+	authRoutes.POST("/signup", auth.RateLimitByIP(auth.RateSignInPerIP), authHandler.Signup)
+	authRoutes.POST("/login", auth.RateLimitByIP(auth.RateSignInPerIP), authHandler.Login)
+	authRoutes.POST("/apple", auth.RateLimitByIP(auth.RateSignInPerIP), authHandler.AppleSignIn)
+	authRoutes.POST("/refresh", auth.RateLimitByIP(auth.RateRefreshPerIP), authHandler.Refresh)
+	authRoutes.POST("/logout", auth.RateLimitByIP(auth.RateLogoutPerIP), authHandler.Logout)
 
 	// WS routes
 	wsRoutes := r.Group("/ws/")

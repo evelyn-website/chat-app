@@ -55,6 +55,21 @@ func (ns NullMessageType) Value() (driver.Value, error) {
 	return string(ns.MessageType), nil
 }
 
+type AuthIdentity struct {
+	ID       uuid.UUID `json:"id"`
+	UserID   uuid.UUID `json:"user_id"`
+	Provider string    `json:"provider"`
+	// Provider-scoped opaque subject (Apple/Google sub claim)
+	Subject string `json:"subject"`
+	// Informational only; may be Apple private relay, may change, never used as lookup key
+	Email         pgtype.Text `json:"email"`
+	EmailVerified pgtype.Bool `json:"email_verified"`
+	// AES-GCM ciphertext (nonce||ct||tag). Only populated for provider = apple.
+	AppleRefreshTokenEncrypted []byte           `json:"apple_refresh_token_encrypted"`
+	CreatedAt                  pgtype.Timestamp `json:"created_at"`
+	LastUsedAt                 pgtype.Timestamp `json:"last_used_at"`
+}
+
 type BlockedUser struct {
 	ID        uuid.UUID        `json:"id"`
 	BlockerID uuid.UUID        `json:"blocker_id"`
@@ -134,14 +149,31 @@ type PushReceipt struct {
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
+type RefreshToken struct {
+	ID               uuid.UUID        `json:"id"`
+	UserID           uuid.UUID        `json:"user_id"`
+	DeviceIdentifier string           `json:"device_identifier"`
+	TokenHash        []byte           `json:"token_hash"`
+	ExpiresAt        pgtype.Timestamp `json:"expires_at"`
+	CreatedAt        pgtype.Timestamp `json:"created_at"`
+	LastUsedAt       pgtype.Timestamp `json:"last_used_at"`
+	RevokedAt        pgtype.Timestamp `json:"revoked_at"`
+	ReplacedBy       *uuid.UUID       `json:"replaced_by"`
+	UserAgent        pgtype.Text      `json:"user_agent"`
+}
+
 type User struct {
-	ID        uuid.UUID        `json:"id"`
-	Username  string           `json:"username"`
-	CreatedAt pgtype.Timestamp `json:"created_at"`
-	UpdatedAt pgtype.Timestamp `json:"updated_at"`
-	Email     string           `json:"email"`
-	Password  pgtype.Text      `json:"password"`
-	Birthday  pgtype.Date      `json:"birthday"`
+	ID          uuid.UUID        `json:"id"`
+	Username    string           `json:"username"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+	Email       pgtype.Text      `json:"email"`
+	Password    pgtype.Text      `json:"password"`
+	Birthday    pgtype.Date      `json:"birthday"`
+	FullName    pgtype.Text      `json:"full_name"`
+	GivenName   pgtype.Text      `json:"given_name"`
+	FamilyName  pgtype.Text      `json:"family_name"`
+	UsernameSet bool             `json:"username_set"`
 }
 
 type UserGroup struct {

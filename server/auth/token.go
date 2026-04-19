@@ -5,23 +5,67 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
+// AccessTokenTTL is the lifetime of access tokens. Short by design — the
+// refresh-token path handles renewal. The 15-minute value bounds the blast
+// radius of a leaked access token.
+const AccessTokenTTL = 15 * time.Minute
+
 var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
-func ValidateToken(tokenString string) (uuid.UUID, error) {
+// ValidatedToken carries out of the parser everything downstream handlers need.
+// Adding DeviceID here (rather than a second return value) keeps the common
+// "claims in context" path extensible if we add more JWT fields later.
+type ValidatedToken struct {
+	UserID   uuid.UUID
+	DeviceID string
+	Typ      string
+}
+
+// IssueAccessToken signs a JWT for the given user+device. typ allows us to
+// distinguish access tokens from any future JWT-shaped credentials (linking
+// flows, etc.), though today all live tokens are typ=access.
+func IssueAccessToken(userID uuid.UUID, deviceID string) (string, int, error) {
+	if len(jwtSecret) == 0 {
+		return "", 0, fmt.Errorf("JWT secret not configured on server")
+	}
+	now := time.Now()
+	claims := Claims{
+		UserID:   userID,
+		DeviceID: deviceID,
+		Typ:      TokenTypeAccess,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := tok.SignedString(jwtSecret)
+	if err != nil {
+		return "", 0, err
+	}
+	return signed, int(AccessTokenTTL.Seconds()), nil
+}
+
+// ValidateToken parses the JWT and returns the identity + device id it was
+// issued for. Errors are preserved via errors.Is so the middleware can map
+// them to user-facing messages.
+func ValidateToken(tokenString string) (ValidatedToken, error) {
 	if tokenString == "" {
-		return uuid.Nil, fmt.Errorf("authorization token required")
+		return ValidatedToken{}, fmt.Errorf("authorization token required")
 	}
 	if len(jwtSecret) == 0 {
 		log.Println("Warning: JWT_SECRET environment variable not set.")
-		return uuid.Nil, fmt.Errorf("JWT secret not configured on server")
+		return ValidatedToken{}, fmt.Errorf("JWT secret not configured on server")
 	}
 
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+	parsed, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -30,47 +74,40 @@ func ValidateToken(tokenString string) (uuid.UUID, error) {
 
 	if err != nil {
 		log.Printf("Token parsing error: %v", err)
-		if errors.Is(err, jwt.ErrTokenMalformed) {
-			return uuid.Nil, fmt.Errorf("malformed token")
-		} else if errors.Is(err, jwt.ErrTokenExpired) {
-			return uuid.Nil, fmt.Errorf("token is expired")
-		} else if errors.Is(err, jwt.ErrTokenNotValidYet) {
-			return uuid.Nil, fmt.Errorf("token not yet valid")
-		} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return uuid.Nil, fmt.Errorf("token signature is invalid")
-		} else {
-			return uuid.Nil, fmt.Errorf("couldn't handle token: %w", err)
+		switch {
+		case errors.Is(err, jwt.ErrTokenMalformed):
+			return ValidatedToken{}, fmt.Errorf("malformed token: %w", err)
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return ValidatedToken{}, fmt.Errorf("token is expired: %w", err)
+		case errors.Is(err, jwt.ErrTokenNotValidYet):
+			return ValidatedToken{}, fmt.Errorf("token not yet valid: %w", err)
+		case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+			return ValidatedToken{}, fmt.Errorf("token signature is invalid: %w", err)
+		default:
+			return ValidatedToken{}, fmt.Errorf("couldn't handle token: %w", err)
 		}
 	}
-	if !token.Valid {
-		log.Printf("Token marked as invalid, though no specific error matched: %v", err)
-		return uuid.Nil, fmt.Errorf("invalid token")
+	if !parsed.Valid {
+		return ValidatedToken{}, fmt.Errorf("invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	claims, ok := parsed.Claims.(*Claims)
 	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid token claims format")
+		return ValidatedToken{}, fmt.Errorf("invalid token claims format")
+	}
+	if claims.UserID == uuid.Nil {
+		return ValidatedToken{}, fmt.Errorf("userID claim missing or nil")
+	}
+	// Defense in depth: reject tokens that declare a typ other than access.
+	// Legacy tokens issued before this change have Typ == "" — we accept those
+	// during the rollout window, since Phase 1 ships as a single cutover.
+	if claims.Typ != "" && claims.Typ != TokenTypeAccess {
+		return ValidatedToken{}, fmt.Errorf("unexpected token typ %q", claims.Typ)
 	}
 
-	userIDClaim, exists := claims["userID"]
-	if !exists {
-		return uuid.Nil, fmt.Errorf("userID claim missing in token")
-	}
-
-	userIDStr, ok := userIDClaim.(string)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("userID claim is not a string")
-	}
-
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to parse userID as UUID: %w", err)
-	}
-
-	if userID == uuid.Nil {
-		return uuid.Nil, fmt.Errorf("parsed userID is a Nil UUID")
-	}
-
-	log.Printf("Token validated successfully for userID: %s", userID)
-	return userID, nil
+	return ValidatedToken{
+		UserID:   claims.UserID,
+		DeviceID: claims.DeviceID,
+		Typ:      claims.Typ,
+	}, nil
 }
