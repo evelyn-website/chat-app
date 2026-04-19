@@ -32,6 +32,8 @@ interface WebSocketContextType {
   removeMessageHandler: (callback: (packet: RawMessage) => void) => void;
   onGroupEvent: (callback: (event: GroupEvent) => void) => void;
   removeGroupEventHandler: (callback: (event: GroupEvent) => void) => void;
+  onAuthFailure: (callback: () => void) => void;
+  removeAuthFailureHandler: (callback: () => void) => void;
   establishConnection: () => Promise<void>;
   disconnect: () => void;
   createGroup: (
@@ -91,6 +93,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connected, setConnected] = useState(false);
   const messageHandlersRef = useRef<((packet: RawMessage) => void)[]>([]);
   const groupEventHandlersRef = useRef<((event: GroupEvent) => void)[]>([]);
+  const authFailureHandlersRef = useRef<(() => void)[]>([]);
   const isReconnecting = useRef(false);
   const preventRetriesRef = useRef(false);
   const appState = useRef(AppState.currentState);
@@ -296,12 +299,20 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
                 }
               } else if (parsedData.type === "auth_failure") {
                 preventRetriesRef.current = true;
+                socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
+                authFailureHandlersRef.current.forEach((handler) => {
+                  Promise.resolve(handler()).catch((handlerError) => {
+                    console.error(
+                      "Error in auth failure handler:",
+                      handlerError,
+                    );
+                  });
+                });
                 safeReject(
                   new Error(
                     `Authentication failed: ${parsedData.error || "Unknown reason"}`,
                   ),
                 );
-                socket.close(CLOSE_CODE_AUTH_FAILED, "Authentication Failed");
               } else {
                 preventRetriesRef.current = true;
                 safeReject(
@@ -604,6 +615,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  const onAuthFailure = useCallback((callback: () => void) => {
+    if (!authFailureHandlersRef.current.includes(callback)) {
+      authFailureHandlersRef.current = [
+        ...authFailureHandlersRef.current,
+        callback,
+      ];
+    }
+  }, []);
+
+  const removeAuthFailureHandler = useCallback((callback: () => void) => {
+    authFailureHandlersRef.current = authFailureHandlersRef.current.filter(
+      (h) => h !== callback,
+    );
+  }, []);
+
   useEffect(() => {
     preventRetriesRef.current = false;
     return () => {
@@ -719,6 +745,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({
         removeMessageHandler,
         onGroupEvent,
         removeGroupEventHandler,
+        onAuthFailure,
+        removeAuthFailureHandler,
         establishConnection,
         disconnect,
         createGroup,
