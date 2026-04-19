@@ -2,11 +2,6 @@
 -- or "email hidden on subsequent sign-in" cases don't violate the schema.
 ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 
--- Birthday was captured by the email+password signup form. SIWA does not
--- surface a birthday, so new OIDC users will not have one. Keep the column
--- for legacy rows but allow NULL.
-ALTER TABLE users ALTER COLUMN birthday DROP NOT NULL;
-
 -- Capture SIWA-provided name components. Apple only returns these on the
 -- first sign-in per identity, so we persist whatever the client sends.
 ALTER TABLE users
