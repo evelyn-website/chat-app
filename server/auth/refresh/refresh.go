@@ -71,14 +71,12 @@ func Hash(plaintext string) []byte {
 	return sum[:]
 }
 
-// Issue inserts a fresh refresh token row for (userID, deviceIdentifier) and
-// returns the plaintext to hand back to the client.
-func (s *Store) Issue(ctx context.Context, userID uuid.UUID, deviceIdentifier, userAgent string) (string, error) {
+func (s *Store) issueToken(ctx context.Context, q *db.Queries, userID uuid.UUID, deviceIdentifier, userAgent string) (string, error) {
 	plaintext, hash, err := Generate()
 	if err != nil {
 		return "", fmt.Errorf("generate: %w", err)
 	}
-	_, err = s.queries.InsertRefreshToken(ctx, db.InsertRefreshTokenParams{
+	_, err = q.InsertRefreshToken(ctx, db.InsertRefreshTokenParams{
 		UserID:           userID,
 		DeviceIdentifier: deviceIdentifier,
 		TokenHash:        hash,
@@ -91,25 +89,17 @@ func (s *Store) Issue(ctx context.Context, userID uuid.UUID, deviceIdentifier, u
 	return plaintext, nil
 }
 
+// Issue inserts a fresh refresh token row for (userID, deviceIdentifier) and
+// returns the plaintext to hand back to the client.
+func (s *Store) Issue(ctx context.Context, userID uuid.UUID, deviceIdentifier, userAgent string) (string, error) {
+	return s.issueToken(ctx, s.queries, userID, deviceIdentifier, userAgent)
+}
+
 // IssueTx behaves like Issue but participates in an existing transaction. Used
 // by /auth/apple so user creation, identity upsert, device-key upsert, and
 // refresh-token issuance either all succeed or all roll back together.
 func (s *Store) IssueTx(ctx context.Context, qtx *db.Queries, userID uuid.UUID, deviceIdentifier, userAgent string) (string, error) {
-	plaintext, hash, err := Generate()
-	if err != nil {
-		return "", fmt.Errorf("generate: %w", err)
-	}
-	_, err = qtx.InsertRefreshToken(ctx, db.InsertRefreshTokenParams{
-		UserID:           userID,
-		DeviceIdentifier: deviceIdentifier,
-		TokenHash:        hash,
-		ExpiresAt:        pgtype.Timestamp{Time: time.Now().Add(TTL), Valid: true},
-		UserAgent:        pgtype.Text{String: userAgent, Valid: userAgent != ""},
-	})
-	if err != nil {
-		return "", fmt.Errorf("insert: %w", err)
-	}
-	return plaintext, nil
+	return s.issueToken(ctx, qtx, userID, deviceIdentifier, userAgent)
 }
 
 // RotateResult carries the output of a successful rotation so the caller can

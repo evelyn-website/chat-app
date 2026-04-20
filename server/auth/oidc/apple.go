@@ -112,15 +112,8 @@ func (v *AppleVerifier) Verify(ctx context.Context, rawIDToken string, rawNonce 
 		return nil, ErrMissingSubject
 	}
 
-	// nonce — Apple echoes the hash the client passed verbatim in the id_token
-	// claim, so the server must compute the same encoding. We use lowercase hex
-	// because expo-crypto.digestStringAsync(SHA256) outputs hex by default,
-	// meaning the client can pass the digest straight to AppleAuthentication
-	// without conversion. Compare case-insensitively in case a future client
-	// or provider normalises capitalisation differently.
-	// rawNonce here is the pre-hash string, not the digest.
-	// We only validate when rawNonce is non-empty; omitting it skips the check
-	// for legacy SIWA flows. Current plan always supplies a nonce.
+	// rawNonce is the pre-hash string; we SHA-256 + hex-encode to match
+	// expo-crypto.digestStringAsync output. EqualFold guards against casing differences.
 	if rawNonce != "" {
 		expectedHash := sha256.Sum256([]byte(rawNonce))
 		expected := hex.EncodeToString(expectedHash[:])

@@ -41,42 +41,32 @@ var (
 	userLimiters   = map[string]*limiter.Limiter{}
 )
 
-func ipLimiterFor(rate string) *limiter.Limiter {
-	ipLimitersMu.Lock()
-	defer ipLimitersMu.Unlock()
-	if lim, ok := ipLimiters[rate]; ok {
+// limiterFor is the shared factory for both IP and user limiters: lazy-init
+// with a mutex, memoize by rate string, panic on misconfigured format so bad
+// configs are caught at startup rather than silently failing open.
+func limiterFor(mu *sync.Mutex, cache map[string]*limiter.Limiter, rate string) *limiter.Limiter {
+	mu.Lock()
+	defer mu.Unlock()
+	if lim, ok := cache[rate]; ok {
 		return lim
 	}
 	r, err := limiter.NewRateFromFormatted(rate)
 	if err != nil {
-		// Misconfigured code path — fail loud at startup.
 		panic("auth: invalid rate format " + rate + ": " + err.Error())
 	}
 	lim := limiter.New(memstore.NewStore(), r)
-	ipLimiters[rate] = lim
+	cache[rate] = lim
 	return lim
 }
+
+func ipLimiterFor(rate string) *limiter.Limiter  { return limiterFor(&ipLimitersMu, ipLimiters, rate) }
+func userLimiterFor(rate string) *limiter.Limiter { return limiterFor(&userLimitersMu, userLimiters, rate) }
 
 // RateLimitByIP returns a middleware that rate-limits the current request's
 // client IP against the given token-bucket budget. Limiters are memoized by
 // rate string, so multiple endpoints sharing the same rate share one bucket.
 func RateLimitByIP(rate string) gin.HandlerFunc {
 	return mw.NewMiddleware(ipLimiterFor(rate))
-}
-
-func userLimiterFor(rate string) *limiter.Limiter {
-	userLimitersMu.Lock()
-	defer userLimitersMu.Unlock()
-	if lim, ok := userLimiters[rate]; ok {
-		return lim
-	}
-	r, err := limiter.NewRateFromFormatted(rate)
-	if err != nil {
-		panic("auth: invalid rate format " + rate + ": " + err.Error())
-	}
-	lim := limiter.New(memstore.NewStore(), r)
-	userLimiters[rate] = lim
-	return lim
 }
 
 // RateLimitByUser returns a middleware that rate-limits by authenticated

@@ -35,13 +35,12 @@ type LoginRequest struct {
 	SigningPublicKey string `json:"signing_public_key" binding:"required"`
 }
 
-// AppleSignInRequest is the payload to POST /auth/apple. authorization_code is
-// opportunistic / best-effort: include it when available (Apple only vends it
-// once, on first sign-in) so the server can store an Apple refresh token for
-// account deletion via /auth/revoke. Omitting it never fails the sign-in.
-// AppleSignInRequest is the payload to POST /auth/apple. birthday is required
-// for first-time sign-ins (new account creation) and ignored for returning
-// users. Format: YYYY-MM-DD. The server enforces age ≥ 18 for new accounts.
+// AppleSignInRequest is the payload to POST /auth/apple.
+// authorization_code is opportunistic — include when available (Apple vends it
+// once per sign-in) so the server can store an Apple refresh token for account
+// deletion via /auth/revoke; omitting it never fails the sign-in.
+// birthday is required for new accounts and ignored for returning users.
+// Format: YYYY-MM-DD. The server enforces age ≥ 18 for new accounts.
 type AppleSignInRequest struct {
 	IDToken           string         `json:"id_token" binding:"required"`
 	AuthorizationCode string         `json:"authorization_code"`

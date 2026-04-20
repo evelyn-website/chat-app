@@ -45,7 +45,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	accessToken, ttlSeconds, err := IssueAccessToken(result.UserID, result.DeviceIdentifier)
 	if err != nil {
 		log.Printf("Refresh: failed to issue access token for user %s: %v", result.UserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to issue access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to issue access token"})
 		return
 	}
 

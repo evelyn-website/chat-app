@@ -62,7 +62,7 @@ SET username = $2,
     username_set = TRUE,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, username, email, full_name, username_set, created_at, updated_at;
+RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at;
 
 -- name: GetUserIdentityFields :one
 -- Used by /whoami to hydrate the client with name + username_set after a

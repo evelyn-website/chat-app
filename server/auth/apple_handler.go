@@ -95,7 +95,7 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 	tx, err := h.conn.Begin(ctx)
 	if err != nil {
 		log.Printf("AppleSignIn: begin tx: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -108,7 +108,7 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 	}
 	if err != nil {
 		log.Printf("AppleSignIn: findOrCreateUser: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 		SigningPublicKey: signPubKey,
 	}); err != nil {
 		log.Printf("AppleSignIn: register device key: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 
@@ -129,39 +129,39 @@ func (h *AuthHandler) AppleSignIn(c *gin.Context) {
 	refreshPlain, err := h.refresh.IssueTx(ctx, qtx, userID, req.DeviceIdentifier, c.Request.UserAgent())
 	if err != nil {
 		log.Printf("AppleSignIn: issue refresh token: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		log.Printf("AppleSignIn: commit: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 
-	// Opportunistic authorization_code exchange runs AFTER commit so the
-	// critical sign-in path doesn't hold a pooled DB connection while waiting
-	// on Apple's /auth/token (10s timeout). Any failure here is logged but
-	// non-fatal: the user can still sign in; only the "delete account via Apple
-	// revoke" capability is degraded. A redundant exchange on the client's next
-	// retry is harmless — GetAppleRefreshTokenEncrypted guards the idempotency.
-	if err := h.maybeExchangeAppleCode(ctx, identityID, req.AuthorizationCode); err != nil {
-		log.Printf("AppleSignIn: apple code exchange (user=%s): %v", userID, err)
-	}
+	// Opportunistic background exchange: non-fatal; runs in a goroutine so
+	// Apple's /auth/token (10s timeout) doesn't block the sign-in response.
+	// Only the "delete account via Apple revoke" capability is degraded if
+	// this fails. A retry is harmless — GetAppleRefreshTokenEncrypted guards
+	// idempotency. Uses context.Background so cancelling the HTTP request
+	// doesn't abort a mid-flight Apple call.
+	go func() {
+		if err := h.maybeExchangeAppleCode(context.Background(), identityID, req.AuthorizationCode); err != nil {
+			log.Printf("AppleSignIn: apple code exchange (user=%s): %v", userID, err)
+		}
+	}()
 
-	// Post-commit: mint the access token and hydrate the response with whatever
-	// the just-committed user row has.
 	accessToken, ttlSeconds, err := IssueAccessToken(userID, req.DeviceIdentifier)
 	if err != nil {
 		log.Printf("AppleSignIn: issue access token: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 
 	user, err := h.db.GetUserIdentityFields(ctx, userID)
 	if err != nil {
 		log.Printf("AppleSignIn: fetch user %s post-commit: %v", userID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Sign-in failed"})
 		return
 	}
 

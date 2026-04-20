@@ -15,6 +15,9 @@ import (
 const (
 	AppleTokenEndpoint  = "https://appleid.apple.com/auth/token"
 	AppleRevokeEndpoint = "https://appleid.apple.com/auth/revoke"
+
+	grantTypeAuthCode    = "authorization_code"
+	tokenTypeHintRefresh = "refresh_token"
 )
 
 // Client calls Apple's server-to-server endpoints. Constructed once per
@@ -60,6 +63,23 @@ type appleError struct {
 // signal so the user can re-sign with a fresh code.
 var ErrAuthorizationCodeInvalid = errors.New("apple: authorization_code invalid or consumed")
 
+// doPost POSTs a URL-encoded form to endpoint and returns the response body and
+// status code. Transport errors (not HTTP errors) are returned as err.
+func (c *Client) doPost(ctx context.Context, endpoint string, form url.Values) (body []byte, status int, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, _ = io.ReadAll(resp.Body)
+	return body, resp.StatusCode, nil
+}
+
 // ExchangeAuthorizationCode runs the authorization_code grant. On success the
 // returned TokenResponse.RefreshToken is Apple's long-lived refresh token for
 // this identity; store it encrypted.
@@ -71,31 +91,20 @@ func (c *Client) ExchangeAuthorizationCode(ctx context.Context, code string) (*T
 	form := url.Values{
 		"client_id":     {c.Cfg.ServicesID},
 		"client_secret": {secret},
-		"grant_type":    {"authorization_code"},
+		"grant_type":    {grantTypeAuthCode},
 		"code":          {code},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL, strings.NewReader(form.Encode()))
+	body, status, err := c.doPost(ctx, c.TokenURL, form)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("apple: /auth/token: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("apple: /auth/token request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("apple: read /auth/token body: %w", err)
-	}
-	if resp.StatusCode >= 400 {
+	if status >= 400 {
 		var ae appleError
 		_ = json.Unmarshal(body, &ae)
 		if ae.Code == "invalid_grant" {
 			return nil, ErrAuthorizationCodeInvalid
 		}
-		return nil, fmt.Errorf("apple: /auth/token %d: %s (%s)", resp.StatusCode, ae.Code, ae.Description)
+		return nil, fmt.Errorf("apple: /auth/token %d: %s (%s)", status, ae.Code, ae.Description)
 	}
 	var tr TokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
@@ -118,23 +127,16 @@ func (c *Client) RevokeRefreshToken(ctx context.Context, refreshToken string) er
 		"client_id":       {c.Cfg.ServicesID},
 		"client_secret":   {secret},
 		"token":           {refreshToken},
-		"token_type_hint": {"refresh_token"},
+		"token_type_hint": {tokenTypeHintRefresh},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RevokeURL, strings.NewReader(form.Encode()))
+	body, status, err := c.doPost(ctx, c.RevokeURL, form)
 	if err != nil {
-		return err
+		return fmt.Errorf("apple: /auth/revoke: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return fmt.Errorf("apple: /auth/revoke request: %w", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
+	if status >= 400 {
 		var ae appleError
 		_ = json.Unmarshal(body, &ae)
-		return fmt.Errorf("apple: /auth/revoke %d: %s (%s)", resp.StatusCode, ae.Code, ae.Description)
+		return fmt.Errorf("apple: /auth/revoke %d: %s (%s)", status, ae.Code, ae.Description)
 	}
 	return nil
 }

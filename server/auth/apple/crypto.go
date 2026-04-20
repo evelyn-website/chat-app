@@ -32,12 +32,7 @@ func LoadEncryptionKey() ([]byte, error) {
 	return key, nil
 }
 
-// Encrypt wraps plaintext with AES-256-GCM. The layout of the returned blob is
-// [12-byte nonce || ciphertext || 16-byte auth tag]. Decrypt expects the same.
-//
-// A fresh nonce is generated with crypto/rand on every call; never reuse a
-// nonce for the same key.
-func Encrypt(key, plaintext []byte) ([]byte, error) {
+func newGCM(key []byte) (cipher.AEAD, error) {
 	if len(key) != 32 {
 		return nil, errors.New("apple: encryption key must be 32 bytes")
 	}
@@ -45,7 +40,16 @@ func Encrypt(key, plaintext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
+	return cipher.NewGCM(block)
+}
+
+// Encrypt wraps plaintext with AES-256-GCM. The layout of the returned blob is
+// [12-byte nonce || ciphertext || 16-byte auth tag]. Decrypt expects the same.
+//
+// A fresh nonce is generated with crypto/rand on every call; never reuse a
+// nonce for the same key.
+func Encrypt(key, plaintext []byte) ([]byte, error) {
+	gcm, err := newGCM(key)
 	if err != nil {
 		return nil, err
 	}
@@ -60,14 +64,7 @@ func Encrypt(key, plaintext []byte) ([]byte, error) {
 
 // Decrypt reverses Encrypt.
 func Decrypt(key, blob []byte) ([]byte, error) {
-	if len(key) != 32 {
-		return nil, errors.New("apple: encryption key must be 32 bytes")
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := newGCM(key)
 	if err != nil {
 		return nil, err
 	}

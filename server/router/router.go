@@ -50,7 +50,6 @@ func InitRouter(authHandler *auth.AuthHandler, wsHandler *ws.Handler, api *serve
 	// Invite preview (unauthenticated)
 	r.GET("/public/invites/:code", wsHandler.ValidateInvite)
 
-	// auth routes group
 	// auth routes group. Per plan §2.6 the public endpoints are rate-limited
 	// per-IP with token buckets sized to the sensitivity of each operation:
 	// sign-in creates users, refresh is a credential-stuffing target, logout
