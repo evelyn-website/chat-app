@@ -128,6 +128,12 @@ func (s *Store) Rotate(ctx context.Context, presentedPlaintext, deviceIdentifier
 // caller can retry. This ensures response-critical work (e.g. fetching user
 // fields) is atomic with the token swap so a post-commit DB failure cannot
 // leave the new token committed but undelivered to the client.
+//
+// The work callback's error is returned verbatim as part of the RotateResult
+// error path — no wrapping occurs. Callers should use errors.Is to match
+// sentinel refresh errors (ErrTheftDetected, ErrExpired, etc.) but must also
+// be prepared for raw DB/pgx errors (e.g. pgx.ErrNoRows) propagated from work
+// such as GetUserIdentityFields.
 func (s *Store) RotateWithWork(
 	ctx context.Context,
 	presentedPlaintext, deviceIdentifier, userAgent string,
@@ -162,10 +168,12 @@ func (s *Store) rotate(
 		// Already-revoked path. Distinguish theft (revoked AND replaced) from
 		// benign double-use (revoked via logout, replaced_by NULL).
 		if row.ReplacedBy != nil {
-			if err := qtx.RevokeRefreshTokenFamily(ctx, row.ID); err != nil {
+			theftCtx, theftCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer theftCancel()
+			if err := qtx.RevokeRefreshTokenFamily(theftCtx, row.ID); err != nil {
 				return RotateResult{}, fmt.Errorf("revoke family: %w", err)
 			}
-			if err := tx.Commit(ctx); err != nil {
+			if err := tx.Commit(theftCtx); err != nil {
 				return RotateResult{}, fmt.Errorf("commit theft response: %w", err)
 			}
 			return RotateResult{}, ErrTheftDetected
@@ -214,7 +222,9 @@ func (s *Store) rotate(
 		// theft: drop our not-yet-committed replacement, then revoke the whole
 		// family in a fresh transaction.
 		_ = tx.Rollback(ctx)
-		if err := s.queries.RevokeRefreshTokenFamily(ctx, row.ID); err != nil {
+		raceCtx, raceCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer raceCancel()
+		if err := s.queries.RevokeRefreshTokenFamily(raceCtx, row.ID); err != nil {
 			return RotateResult{}, fmt.Errorf("family revoke after race: %w", err)
 		}
 		return RotateResult{}, ErrTheftDetected

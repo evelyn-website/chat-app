@@ -272,6 +272,7 @@ func TestAppleSignIn_ExchangeFails_SessionStillIssued(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status: got %d want 200 (exchange failure should be non-fatal)", code)
 	}
+	waitExchange(t, stub)
 	t.Cleanup(func() { cleanupIdentity(t, q, resp.UserID) })
 	if resp.UserID == uuid.Nil {
 		t.Fatal("expected a user_id even though exchange failed")
