@@ -88,7 +88,7 @@ ORDER BY bu.created_at DESC
 type GetBlockedUsersRow struct {
 	ID        uuid.UUID        `json:"id"`
 	Username  string           `json:"username"`
-	Email     string           `json:"email"`
+	Email     pgtype.Text      `json:"email"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
 	BlockedAt pgtype.Timestamp `json:"blocked_at"`

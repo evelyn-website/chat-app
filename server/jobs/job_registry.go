@@ -50,6 +50,10 @@ func GetJobConfigs(baseJob BaseJob, deps *JobDependencies) []JobConfig {
 			Job:     &CleanupStaleDeviceKeysJob{BaseJob: baseJob},
 			Enabled: true,
 		},
+		{
+			Job:     &CleanupStaleRefreshTokensJob{BaseJob: baseJob},
+			Enabled: true,
+		},
 	}
 
 	// Add notification-related jobs if notification service is available

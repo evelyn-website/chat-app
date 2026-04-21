@@ -35,6 +35,42 @@ SELECT "id", "username", "email", "password", "created_at", "updated_at" FROM us
 -- name: InsertUser :one
 INSERT INTO users (username, email, password, birthday) VALUES ($1, $2, $3, $4) RETURNING "id", "username", "email", "created_at", "updated_at";
 
+-- name: InsertUserOIDC :one
+-- Creates a user row for an OIDC sign-in. `username` is a placeholder
+-- (username_set=false). The user picks a real handle via POST /api/users/username
+-- before being routed into the app.
+INSERT INTO users (
+    username,
+    email,
+    full_name,
+    given_name,
+    family_name,
+    birthday,
+    username_set
+) VALUES (
+    $1, $2, $3, $4, $5, $6, FALSE
+)
+RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at;
+
+-- name: SetUsername :one
+-- Atomic username pick. The partial unique index on LOWER(username) WHERE
+-- username_set=TRUE handles the race between two users claiming the same
+-- handle concurrently — the loser gets a unique-violation error, which the
+-- handler maps to 409.
+UPDATE users
+SET username = $2,
+    username_set = TRUE,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at;
+
+-- name: GetUserIdentityFields :one
+-- Used by /whoami to hydrate the client with name + username_set after a
+-- cold launch or refresh.
+SELECT id, username, email, full_name, given_name, family_name, username_set, created_at, updated_at
+FROM users
+WHERE id = $1;
+
 -- name: UpdateUser :one
 UPDATE users 
 SET

@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"chat-app-server/auth/apple"
+	"chat-app-server/auth/oidc"
+	"chat-app-server/auth/refresh"
 	"chat-app-server/db"
 	"context"
 	"crypto/ed25519"
@@ -21,17 +24,45 @@ import (
 )
 
 type AuthHandler struct {
-	db   *db.Queries
-	ctx  context.Context
-	conn *pgxpool.Pool
+	db            *db.Queries
+	ctx           context.Context
+	conn          *pgxpool.Pool
+	refresh       *refresh.Store
+	appleVerifier oidc.IDTokenVerifier
+	appleClient   *apple.Client
+	appleEncKey   []byte // AES-256 key for apple_refresh_token_encrypted; nil if unconfigured
 }
 
 func NewAuthHandler(db *db.Queries, ctx context.Context, conn *pgxpool.Pool) *AuthHandler {
-	return &AuthHandler{
-		db:   db,
-		ctx:  ctx,
-		conn: conn,
+	h := &AuthHandler{
+		db:      db,
+		ctx:     ctx,
+		conn:    conn,
+		refresh: refresh.NewStore(db, conn),
 	}
+
+	// Apple verifier: configured from env. If APPLE_SERVICES_ID is missing we
+	// skip wiring so unit-test stacks without Apple env don't fail at startup.
+	if aud := os.Getenv(apple.EnvServicesID); aud != "" {
+		h.appleVerifier = oidc.NewAppleVerifier(oidc.AppleJWKSURL, []string{aud})
+	}
+
+	// Apple server-to-server client + encryption key are optional: without
+	// them we can still accept SIWA sign-ins, we just can't exchange the
+	// authorization_code. The handler surfaces a distinct log when it's
+	// missing, and account-delete-time revocation becomes a no-op.
+	if cfg, err := apple.LoadConfigFromEnv(); err == nil {
+		h.appleClient = apple.NewClient(cfg)
+	} else {
+		log.Printf("Apple client not configured: %v (authorization_code exchange disabled)", err)
+	}
+	if key, err := apple.LoadEncryptionKey(); err == nil {
+		h.appleEncKey = key
+	} else {
+		log.Printf("Apple refresh-token encryption key not configured: %v", err)
+	}
+
+	return h
 }
 
 func (h *AuthHandler) registerOrUpdateDeviceKey(
@@ -106,7 +137,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 	}
 
 	pgBirthday := pgtype.Date{Time: birthday, Valid: true}
-	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: strings.TrimSpace(req.Username), Email: req.Email, Password: pgtype.Text{String: string(hash), Valid: true}, Birthday: pgBirthday})
+	user, err := h.db.InsertUser(ctx, db.InsertUserParams{Username: strings.TrimSpace(req.Username), Email: pgtype.Text{String: req.Email, Valid: true}, Password: pgtype.Text{String: string(hash), Valid: true}, Birthday: pgBirthday})
 	if err != nil {
 		log.Printf("Error inserting user during signup for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Signup failed, possibly due to existing user or database issue."})

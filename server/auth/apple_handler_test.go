@@ -1,0 +1,420 @@
+package auth
+
+import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"chat-app-server/auth/apple"
+	"chat-app-server/auth/oidc"
+	"chat-app-server/db"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// fakeVerifier lets tests bypass the real OIDC id_token verification and
+// feed synthetic claims to the handler. The plan's `/auth/apple` idempotency
+// tests don't care about Apple's JWKS path — they care about the DB + refresh
+// token state machine — so stubbing the verifier is both faster and more
+// focused.
+type fakeVerifier struct {
+	claims *oidc.Claims
+	err    error
+}
+
+func (f *fakeVerifier) Verify(ctx context.Context, rawIDToken, rawNonce string) (*oidc.Claims, error) {
+	return f.claims, f.err
+}
+
+// newAppleTestHandler wires an AuthHandler against a real Postgres pool,
+// swapping in a fake verifier plus (optionally) a stub Apple client backed by
+// an httptest server. The stub Apple server tracks how many times
+// /auth/token was hit so the tests can assert the "don't re-exchange on retry"
+// behavior.
+type appleStub struct {
+	srv           *httptest.Server
+	exchangeCalls int
+	failExchange  bool
+	// exchanged is closed the first time /auth/token is called, letting tests
+	// synchronise with the background code-exchange goroutine before asserting
+	// on exchangeCalls or closing the DB pool.
+	exchanged chan struct{}
+	once      sync.Once
+}
+
+func newAppleStub(t *testing.T) *appleStub {
+	t.Helper()
+	s := &appleStub{exchanged: make(chan struct{})}
+	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/token" {
+			s.exchangeCalls++
+			s.once.Do(func() { close(s.exchanged) })
+			if s.failExchange {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"refresh_token":"r.apple.rt","expires_in":3600,"token_type":"Bearer"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(s.srv.Close)
+	return s
+}
+
+// waitExchange blocks until the background Apple code-exchange goroutine has
+// called the stub's /auth/token endpoint, or the test times out. Call this
+// before asserting on stub.exchangeCalls and before closing the DB pool so the
+// goroutine can complete its DB writes.
+func waitExchange(t *testing.T, stub *appleStub) {
+	t.Helper()
+	select {
+	case <-stub.exchanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background Apple code-exchange goroutine did not call /auth/token within 2s")
+	}
+}
+
+func newTestAppleHandler(t *testing.T, verifier *fakeVerifier, stub *appleStub) (*AuthHandler, *db.Queries, *pgxpool.Pool, func()) {
+	t.Helper()
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		t.Skip("DB_URL not set; skipping apple handler tests")
+	}
+	// Tests need a JWT_SECRET to mint access tokens.
+	if os.Getenv("JWT_SECRET") == "" {
+		t.Setenv("JWT_SECRET", "test-jwt-secret-do-not-use-in-prod")
+		jwtSecret = []byte(os.Getenv("JWT_SECRET"))
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	q := db.New(pool)
+	h := NewAuthHandler(q, ctx, pool)
+	h.appleVerifier = verifier
+
+	// Build a minimal ES256 Apple client pointed at the stub.
+	if stub != nil {
+		ecKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		h.appleClient = apple.NewClient(apple.ClientSecretConfig{
+			TeamID: "T", KeyID: "K", ServicesID: "com.example.signin", PrivateKey: ecKey,
+		})
+		h.appleClient.TokenURL = stub.srv.URL + "/auth/token"
+		h.appleClient.RevokeURL = stub.srv.URL + "/auth/revoke"
+
+		encKey := make([]byte, 32)
+		_, _ = rand.Read(encKey)
+		h.appleEncKey = encKey
+	}
+
+	cleanup := func() { pool.Close() }
+	return h, q, pool, cleanup
+}
+
+// makeReq builds an AppleSignInRequest with generated device keys so the
+// handler's decoding/length checks pass.
+func makeReq(t *testing.T, deviceID, authCode string) AppleSignInRequest {
+	t.Helper()
+	// Real-shape 32-byte Curve25519 public key (we just need well-formed base64).
+	pub := make([]byte, 32)
+	_, _ = rand.Read(pub)
+	_, ed25519Priv, _ := ed25519.GenerateKey(rand.Reader)
+	_ = ed25519Priv // unused — we only need the public half
+	edPub := ed25519Priv.Public().(ed25519.PublicKey)
+	return AppleSignInRequest{
+		IDToken:           "fake-id-token",
+		AuthorizationCode: authCode,
+		Nonce:             "client-nonce",
+		DeviceIdentifier:  deviceID,
+		PublicKey:         base64.StdEncoding.EncodeToString(pub),
+		SigningPublicKey:  base64.StdEncoding.EncodeToString(edPub),
+	}
+}
+
+// doSignIn invokes the handler via httptest and returns the response body.
+func doSignIn(t *testing.T, h *AuthHandler, req AppleSignInRequest) (int, AuthResponse) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/auth/apple", h.AppleSignIn)
+
+	body, _ := json.Marshal(req)
+	httpReq := httptest.NewRequest(http.MethodPost, "/auth/apple", bytes.NewReader(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httpReq)
+
+	var out AuthResponse
+	if rec.Code == http.StatusOK {
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	}
+	return rec.Code, out
+}
+
+// cleanupIdentity removes the test user + identity rows so tests don't
+// pollute the shared dev DB. Identity row has ON DELETE CASCADE via user_id,
+// so deleting the user is enough.
+func cleanupIdentity(t *testing.T, q *db.Queries, userID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	_, _ = q.DeleteUser(ctx, userID)
+}
+
+func TestAppleSignIn_FirstTime_CreatesUser(t *testing.T) {
+	stub := newAppleStub(t)
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: "sub-first-" + uuid.NewString(),
+		Email: "me@example.com", EmailVerified: true,
+	}}
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, stub)
+	defer cleanup()
+
+	full := &AppleFullName{Given: "Jane", Family: "Roe"}
+	req := makeReq(t, "dev-"+uuid.NewString(), "code-1")
+	req.FullName = full
+	req.Birthday = "1990-01-15"
+
+	code, resp := doSignIn(t, h, req)
+	if code != http.StatusOK {
+		t.Fatalf("status: got %d want 200", code)
+	}
+	waitExchange(t, stub)
+	t.Cleanup(func() { cleanupIdentity(t, q, resp.UserID) })
+
+	if resp.UserID == uuid.Nil {
+		t.Fatal("user_id empty")
+	}
+	if resp.UsernameSet {
+		t.Error("brand-new user should have username_set=false")
+	}
+	if resp.FullName != "Jane Roe" {
+		t.Errorf("full_name: got %q want %q", resp.FullName, "Jane Roe")
+	}
+	if resp.AccessToken == "" || resp.RefreshToken == "" {
+		t.Error("tokens missing from response")
+	}
+	if stub.exchangeCalls != 1 {
+		t.Errorf("expected 1 /auth/token call, got %d", stub.exchangeCalls)
+	}
+}
+
+// Idempotency: two calls for the same (provider, subject) land on the same
+// user row, do NOT create duplicates, and do NOT re-run authorization_code
+// exchange (Apple codes are one-time-use). This is the test called out in
+// plan §9.3 and implementation-steps §1.5.
+func TestAppleSignIn_Idempotent_Repeat(t *testing.T) {
+	stub := newAppleStub(t)
+	sub := "sub-repeat-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub, Email: "x@y", EmailVerified: true,
+	}}
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, stub)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "code-1")
+	req.Birthday = "1990-01-15"
+	_, first := doSignIn(t, h, req)
+	t.Cleanup(func() { cleanupIdentity(t, q, first.UserID) })
+	waitExchange(t, stub)
+	if stub.exchangeCalls != 1 {
+		t.Fatalf("first call exchange: got %d want 1", stub.exchangeCalls)
+	}
+
+	// Second call with the same device, same subject (simulating a retry after
+	// a client-side crash before tokens were persisted) and a *different*
+	// authorization_code — we already hold one, so we must NOT re-exchange.
+	req2 := makeReq(t, req.DeviceIdentifier, "code-2")
+	_, second := doSignIn(t, h, req2)
+	if second.UserID != first.UserID {
+		t.Fatalf("idempotency: second call produced a different user_id (%v vs %v)", second.UserID, first.UserID)
+	}
+	if stub.exchangeCalls != 1 {
+		t.Errorf("re-exchange: got %d calls, expected 1 (code already stored)", stub.exchangeCalls)
+	}
+}
+
+// If Apple rejects the authorization_code (expired / reused), the handler
+// should still return a valid session — only the Apple /auth/revoke capability
+// is degraded.
+func TestAppleSignIn_ExchangeFails_SessionStillIssued(t *testing.T) {
+	stub := newAppleStub(t)
+	stub.failExchange = true
+	sub := "sub-fail-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub,
+	}}
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, stub)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "code-expired")
+	req.Birthday = "1990-01-15"
+	code, resp := doSignIn(t, h, req)
+	if code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (exchange failure should be non-fatal)", code)
+	}
+	waitExchange(t, stub)
+	t.Cleanup(func() { cleanupIdentity(t, q, resp.UserID) })
+	if resp.UserID == uuid.Nil {
+		t.Fatal("expected a user_id even though exchange failed")
+	}
+}
+
+func TestAppleSignIn_InvalidIDToken_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{err: oidc.ErrSignatureInvalid}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev", "")
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("status: got %d want 401", code)
+	}
+}
+
+func TestAppleSignIn_MalformedPublicKey_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{claims: &oidc.Claims{Provider: "apple", Subject: "s"}}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev", "")
+	req.PublicKey = "!!! not base64 !!!"
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400", code)
+	}
+}
+
+func TestAppleSignIn_UnderAgeBirthday_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: "sub-underage-" + uuid.NewString(),
+	}}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	req.Birthday = time.Now().AddDate(-17, 0, 0).Format("2006-01-02")
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusForbidden {
+		t.Fatalf("status: got %d want 403", code)
+	}
+}
+
+func TestAppleSignIn_MissingBirthday_NewAccount_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: "sub-nobday-" + uuid.NewString(),
+	}}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	// Birthday intentionally omitted — handler must reject for new accounts.
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400", code)
+	}
+}
+
+func TestAppleSignIn_ReturningUser_NoBirthdayRequired(t *testing.T) {
+	sub := "sub-returning-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub,
+	}}
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	// First sign-in: provide birthday to create the account.
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	req.Birthday = "1990-06-15"
+	code, first := doSignIn(t, h, req)
+	if code != http.StatusOK {
+		t.Fatalf("first sign-in: got %d want 200", code)
+	}
+	t.Cleanup(func() { cleanupIdentity(t, q, first.UserID) })
+
+	// Second sign-in: same identity, birthday omitted — must succeed.
+	req2 := makeReq(t, "dev-"+uuid.NewString(), "")
+	code2, _ := doSignIn(t, h, req2)
+	if code2 != http.StatusOK {
+		t.Fatalf("returning sign-in without birthday: got %d want 200", code2)
+	}
+}
+
+// TestAppleSignIn_ConcurrentRace fires N goroutines with the same
+// (provider, subject) simultaneously for the first time. The ON CONFLICT path
+// in InsertAuthIdentity plus the orphan-cleanup in findOrCreateAppleUser must
+// ensure all goroutines land on the same user row (no duplicates, no 5xx).
+func TestAppleSignIn_ConcurrentRace(t *testing.T) {
+	const N = 8
+	sub := "sub-race-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub, Email: "race@example.com", EmailVerified: true,
+	}}
+	// No appleStub needed — we don't care about the code-exchange in this test.
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	type result struct {
+		code int
+		resp AuthResponse
+	}
+	results := make([]result, N)
+	var wg sync.WaitGroup
+	wg.Add(N)
+	ready := make(chan struct{})
+	for i := range N {
+		go func(i int) {
+			defer wg.Done()
+			<-ready
+			req := makeReq(t, "dev-"+uuid.NewString(), "")
+			req.Birthday = "1990-01-15"
+			code, resp := doSignIn(t, h, req)
+			results[i] = result{code, resp}
+		}(i)
+	}
+	close(ready)
+	wg.Wait()
+
+	// Collect the winning user_id and verify all goroutines agree on it.
+	var canonical uuid.UUID
+	for i, r := range results {
+		if r.code != http.StatusOK {
+			t.Errorf("goroutine %d: got %d want 200", i, r.code)
+			continue
+		}
+		if r.resp.UserID == uuid.Nil {
+			t.Errorf("goroutine %d: user_id is nil", i)
+			continue
+		}
+		if canonical == uuid.Nil {
+			canonical = r.resp.UserID
+			t.Cleanup(func() { cleanupIdentity(t, q, canonical) })
+		} else if r.resp.UserID != canonical {
+			t.Errorf("goroutine %d: user_id %v != canonical %v (duplicate user created)", i, r.resp.UserID, canonical)
+		}
+	}
+}
+
+// Silence unused-import warnings if the file grows over time and some helpers
+// temporarily fall out of use.
+var _ = pem.EncodeToMemory
+var _ = x509.MarshalPKCS8PrivateKey
