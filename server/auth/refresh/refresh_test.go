@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -236,6 +237,62 @@ func TestRotateWithWork_WorkFailureRollsBack(t *testing.T) {
 	}
 	if res.UserID != userID {
 		t.Errorf("user: got %v want %v", res.UserID, userID)
+	}
+}
+
+// TestRotate_ConcurrentRace is the goroutine-level test for the concurrent
+// rotation race: N goroutines present the same token simultaneously. Exactly
+// one must succeed; all others must get ErrTheftDetected (the `affected == 0`
+// branch in rotate() that detects the lost UPDATE race).
+func TestRotate_ConcurrentRace(t *testing.T) {
+	const N = 10
+	store, q := newTestStore(t)
+	ctx := context.Background()
+
+	userID := insertTestUser(t, q)
+	plaintext, err := store.Issue(ctx, userID, "device-1", "")
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	type outcome struct {
+		res RotateResult
+		err error
+	}
+	results := make([]outcome, N)
+	var wg sync.WaitGroup
+	wg.Add(N)
+	// ready gates all goroutines to start at the same moment to maximise
+	// contention on the shared refresh_tokens row.
+	ready := make(chan struct{})
+	for i := range N {
+		go func(i int) {
+			defer wg.Done()
+			<-ready
+			res, err := store.Rotate(ctx, plaintext, "device-1", "")
+			results[i] = outcome{res, err}
+		}(i)
+	}
+	close(ready)
+	wg.Wait()
+
+	var successes, thefts, others int
+	for _, o := range results {
+		switch {
+		case o.err == nil:
+			successes++
+		case errors.Is(o.err, ErrTheftDetected):
+			thefts++
+		default:
+			others++
+			t.Errorf("unexpected error: %v", o.err)
+		}
+	}
+	if successes != 1 {
+		t.Errorf("expected exactly 1 success, got %d", successes)
+	}
+	if thefts != N-1 {
+		t.Errorf("expected %d ErrTheftDetected, got %d", N-1, thefts)
 	}
 }
 
