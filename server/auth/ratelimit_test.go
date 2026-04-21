@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // Exercise the per-IP token bucket. The ulule middleware returns 429 once the
@@ -62,5 +63,62 @@ func TestRateLimitByIP_DistinctIPsIndependent(t *testing.T) {
 	engine.ServeHTTP(rec, req)
 	if rec.Code == http.StatusTooManyRequests {
 		t.Fatalf("independent IP should not be throttled; got %d", rec.Code)
+	}
+}
+
+// TestRateLimitByUser_ThrottlesBurst verifies that per-user throttling kicks
+// in once the budget is exhausted. Uses a unique user ID per test run so the
+// in-memory store from prior tests doesn't bleed over.
+func TestRateLimitByUser_ThrottlesBurst(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	uid := uuid.New()
+	// Inject userID into context the same way JWTAuthMiddleware does.
+	setUser := func(c *gin.Context) { c.Set("userID", uid); c.Next() }
+	engine.POST("/x", setUser, RateLimitByUser("2-M"), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	statuses := make(map[int]int)
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		req.RemoteAddr = "10.0.0.1:1"
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+		statuses[rec.Code]++
+	}
+
+	if statuses[http.StatusTooManyRequests] == 0 {
+		t.Fatalf("expected 429 after budget exhausted, got statuses=%v", statuses)
+	}
+	if statuses[http.StatusOK] == 0 {
+		t.Fatalf("expected some 200s before throttle, got statuses=%v", statuses)
+	}
+}
+
+// TestRateLimitByUser_FallsBackToIP confirms the middleware degrades to IP
+// keying when no userID is present in the context (misordered middleware chain
+// or unauthenticated request that somehow reaches this middleware).
+func TestRateLimitByUser_FallsBackToIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	// No setUser middleware — userID absent from context.
+	engine.POST("/x", RateLimitByUser("2-M"), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	statuses := make(map[int]int)
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		req.RemoteAddr = "10.1.1.1:1"
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+		statuses[rec.Code]++
+	}
+
+	// The IP fallback should throttle — proving the middleware didn't skip
+	// rate-limiting entirely when userID was absent.
+	if statuses[http.StatusTooManyRequests] == 0 {
+		t.Fatalf("expected 429 via IP fallback, got statuses=%v", statuses)
 	}
 }

@@ -263,3 +263,26 @@ func TestAppleVerifier_NonceSkippedWhenEmpty(t *testing.T) {
 		t.Fatalf("expected verify ok when nonce not enforced, got %v", err)
 	}
 }
+
+func TestAppleVerifier_JWKSFetchFailure(t *testing.T) {
+	// Stand up a JWKS endpoint that always returns 500, then point a fresh
+	// verifier at it. The verifier must surface ErrJWKSFetchFailure rather
+	// than ErrUnknownKeyID so callers can return a retryable 503 instead of
+	// treating it as a bad credential.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	// Mint a structurally valid JWT using a throwaway key. We only need it to
+	// carry a kid header so the verifier gets past the "kid=="" guard and
+	// attempts to fetch the JWKS.
+	rig := newTestRig(t, []string{"aud"})
+	token := rig.mint(tokenOpts{aud: "aud", sub: "sub"})
+
+	v := NewAppleVerifier(srv.URL, []string{"aud"})
+	_, err := v.Verify(context.Background(), token, "")
+	if !errors.Is(err, ErrJWKSFetchFailure) {
+		t.Fatalf("got %v want ErrJWKSFetchFailure", err)
+	}
+}

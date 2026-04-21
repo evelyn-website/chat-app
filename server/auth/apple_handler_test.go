@@ -304,6 +304,61 @@ func TestAppleSignIn_MalformedPublicKey_Rejected(t *testing.T) {
 	}
 }
 
+func TestAppleSignIn_UnderAgeBirthday_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: "sub-underage-" + uuid.NewString(),
+	}}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	req.Birthday = time.Now().AddDate(-17, 0, 0).Format("2006-01-02")
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusForbidden {
+		t.Fatalf("status: got %d want 403", code)
+	}
+}
+
+func TestAppleSignIn_MissingBirthday_NewAccount_Rejected(t *testing.T) {
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: "sub-nobday-" + uuid.NewString(),
+	}}
+	h, _, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	// Birthday intentionally omitted — handler must reject for new accounts.
+	code, _ := doSignIn(t, h, req)
+	if code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400", code)
+	}
+}
+
+func TestAppleSignIn_ReturningUser_NoBirthdayRequired(t *testing.T) {
+	sub := "sub-returning-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub,
+	}}
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	// First sign-in: provide birthday to create the account.
+	req := makeReq(t, "dev-"+uuid.NewString(), "")
+	req.Birthday = "1990-06-15"
+	code, first := doSignIn(t, h, req)
+	if code != http.StatusOK {
+		t.Fatalf("first sign-in: got %d want 200", code)
+	}
+	t.Cleanup(func() { cleanupIdentity(t, q, first.UserID) })
+
+	// Second sign-in: same identity, birthday omitted — must succeed.
+	req2 := makeReq(t, "dev-"+uuid.NewString(), "")
+	code2, _ := doSignIn(t, h, req2)
+	if code2 != http.StatusOK {
+		t.Fatalf("returning sign-in without birthday: got %d want 200", code2)
+	}
+}
+
 // Silence unused-import warnings if the file grows over time and some helpers
 // temporarily fall out of use.
 var _ = pem.EncodeToMemory
