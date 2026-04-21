@@ -202,13 +202,17 @@ func findOrCreateAppleUser(
 	if err == nil {
 		// Returning user — refresh last_used_at and opportunistically update
 		// email if the provider sent us a non-empty one.
-		_ = qtx.UpdateAuthIdentityLastUsed(ctx, existing.ID)
+		if err := qtx.UpdateAuthIdentityLastUsed(ctx, existing.ID); err != nil {
+			return uuid.Nil, uuid.Nil, false, fmt.Errorf("UpdateAuthIdentityLastUsed (identity %s): %w", existing.ID, err)
+		}
 		if claims.Email != "" {
-			_ = qtx.UpdateAuthIdentityEmail(ctx, db.UpdateAuthIdentityEmailParams{
+			if err := qtx.UpdateAuthIdentityEmail(ctx, db.UpdateAuthIdentityEmailParams{
 				ID:            existing.ID,
 				Email:         pgtype.Text{String: claims.Email, Valid: true},
 				EmailVerified: pgtype.Bool{Bool: claims.EmailVerified, Valid: true},
-			})
+			}); err != nil {
+				return uuid.Nil, uuid.Nil, false, fmt.Errorf("UpdateAuthIdentityEmail (identity %s): %w", existing.ID, err)
+			}
 		}
 		return existing.UserID, existing.ID, false, nil
 	}
@@ -266,8 +270,8 @@ func findOrCreateAppleUser(
 	// update + RETURNING of the winner's row. The user_id on the conflict
 	// resolution may point at a *different* users row than the one we just
 	// inserted — Postgres gives us back the winner's user_id, which is what
-	// we want to return to the client. The losing user row is orphaned; a
-	// future cleanup job can GC them, but it's rare and harmless.
+	// we want to return to the client. The losing user row is cleaned up
+	// in-transaction below.
 	identity, err := qtx.InsertAuthIdentity(ctx, db.InsertAuthIdentityParams{
 		UserID:        user.ID,
 		Provider:      claims.Provider,
@@ -277,6 +281,12 @@ func findOrCreateAppleUser(
 	})
 	if err != nil {
 		return uuid.Nil, uuid.Nil, false, err
+	}
+
+	if identity.UserID != user.ID {
+		if _, err := qtx.DeleteUser(ctx, user.ID); err != nil {
+			return uuid.Nil, uuid.Nil, false, fmt.Errorf("delete orphaned user %s: %w", user.ID, err)
+		}
 	}
 
 	return identity.UserID, identity.ID, identity.UserID == user.ID, nil

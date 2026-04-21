@@ -119,6 +119,28 @@ type RotateResult struct {
 //
 // userAgent is optional and recorded for audit only.
 func (s *Store) Rotate(ctx context.Context, presentedPlaintext, deviceIdentifier, userAgent string) (RotateResult, error) {
+	return s.rotate(ctx, presentedPlaintext, deviceIdentifier, userAgent, nil)
+}
+
+// RotateWithWork is like Rotate but calls work within the rotation transaction
+// before committing. If work returns an error the transaction is rolled back
+// and the rotation is abandoned — the presented token remains valid so the
+// caller can retry. This ensures response-critical work (e.g. fetching user
+// fields) is atomic with the token swap so a post-commit DB failure cannot
+// leave the new token committed but undelivered to the client.
+func (s *Store) RotateWithWork(
+	ctx context.Context,
+	presentedPlaintext, deviceIdentifier, userAgent string,
+	work func(ctx context.Context, q *db.Queries, r RotateResult) error,
+) (RotateResult, error) {
+	return s.rotate(ctx, presentedPlaintext, deviceIdentifier, userAgent, work)
+}
+
+func (s *Store) rotate(
+	ctx context.Context,
+	presentedPlaintext, deviceIdentifier, userAgent string,
+	work func(ctx context.Context, q *db.Queries, r RotateResult) error,
+) (RotateResult, error) {
 	hash := Hash(presentedPlaintext)
 
 	tx, err := s.pool.Begin(ctx)
@@ -198,15 +220,23 @@ func (s *Store) Rotate(ctx context.Context, presentedPlaintext, deviceIdentifier
 		return RotateResult{}, ErrTheftDetected
 	}
 
+	result := RotateResult{
+		NewPlaintext:     newPlaintext,
+		UserID:           row.UserID,
+		DeviceIdentifier: row.DeviceIdentifier,
+	}
+
+	if work != nil {
+		if err := work(ctx, qtx, result); err != nil {
+			return RotateResult{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return RotateResult{}, fmt.Errorf("commit: %w", err)
 	}
 
-	return RotateResult{
-		NewPlaintext:     newPlaintext,
-		UserID:           row.UserID,
-		DeviceIdentifier: row.DeviceIdentifier,
-	}, nil
+	return result, nil
 }
 
 // Revoke marks the presented refresh token revoked. Idempotent: unknown or

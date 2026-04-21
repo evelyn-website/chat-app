@@ -39,4 +39,9 @@ var (
 	ErrNonceMismatch     = errors.New("oidc: nonce mismatch")
 	ErrUnknownKeyID      = errors.New("oidc: kid not present in JWKS")
 	ErrMissingSubject    = errors.New("oidc: sub claim missing")
+	// ErrJWKSFetchFailure indicates the JWKS endpoint could not be reached or
+	// returned an unusable response. Unlike ErrUnknownKeyID (which means the
+	// key exists in the provider but not in our cache), this is a transient
+	// infrastructure error that callers may treat as retryable / 503.
+	ErrJWKSFetchFailure  = errors.New("oidc: JWKS fetch failed")
 )

@@ -70,7 +70,10 @@ func (v *AppleVerifier) Verify(ctx context.Context, rawIDToken string, rawNonce 
 
 	pub, err := v.jwks.Get(ctx, kid)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, ErrUnknownKeyID) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %v", ErrJWKSFetchFailure, err)
 	}
 
 	// Second parse with signature verification and the built-in exp check.

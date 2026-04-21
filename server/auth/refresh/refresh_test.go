@@ -176,6 +176,69 @@ func TestRotate_Expired(t *testing.T) {
 	}
 }
 
+func TestRotateWithWork_HappyPath(t *testing.T) {
+	store, q := newTestStore(t)
+	ctx := context.Background()
+
+	userID := insertTestUser(t, q)
+	plaintext, err := store.Issue(ctx, userID, "device-1", "")
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	var capturedResult RotateResult
+	res, err := store.RotateWithWork(ctx, plaintext, "device-1", "",
+		func(ctx context.Context, q *db.Queries, r RotateResult) error {
+			capturedResult = r
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("RotateWithWork: %v", err)
+	}
+	if res.UserID != userID {
+		t.Errorf("user: got %v want %v", res.UserID, userID)
+	}
+	if capturedResult.UserID != userID {
+		t.Errorf("work saw wrong userID: %v", capturedResult.UserID)
+	}
+	if res.NewPlaintext == plaintext {
+		t.Error("rotated token should differ from original")
+	}
+}
+
+// TestRotateWithWork_WorkFailureRollsBack is the critical invariant: if the
+// work callback fails the transaction must roll back so the presented token
+// remains valid and the client is not stranded with a consumed-but-undelivered
+// new token.
+func TestRotateWithWork_WorkFailureRollsBack(t *testing.T) {
+	store, q := newTestStore(t)
+	ctx := context.Background()
+
+	userID := insertTestUser(t, q)
+	plaintext, err := store.Issue(ctx, userID, "device-1", "")
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	workErr := errors.New("work failed")
+	_, err = store.RotateWithWork(ctx, plaintext, "device-1", "",
+		func(ctx context.Context, q *db.Queries, r RotateResult) error {
+			return workErr
+		})
+	if !errors.Is(err, workErr) {
+		t.Fatalf("got %v want workErr", err)
+	}
+
+	// The original token must still be valid — the rotation was rolled back.
+	res, err := store.Rotate(ctx, plaintext, "device-1", "")
+	if err != nil {
+		t.Fatalf("rotate after failed work should succeed: %v", err)
+	}
+	if res.UserID != userID {
+		t.Errorf("user: got %v want %v", res.UserID, userID)
+	}
+}
+
 func TestRevoke_Idempotent(t *testing.T) {
 	store, q := newTestStore(t)
 	ctx := context.Background()

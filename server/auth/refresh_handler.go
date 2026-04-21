@@ -1,13 +1,16 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 
 	"chat-app-server/auth/refresh"
+	"chat-app-server/db"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 // Refresh handles POST /auth/refresh. The refresh token IS the credential here
@@ -21,7 +24,13 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	userAgent := c.Request.UserAgent()
-	result, err := h.refresh.Rotate(ctx, req.RefreshToken, req.DeviceIdentifier, userAgent)
+	var user db.GetUserIdentityFieldsRow
+	result, err := h.refresh.RotateWithWork(ctx, req.RefreshToken, req.DeviceIdentifier, userAgent,
+		func(ctx context.Context, q *db.Queries, r refresh.RotateResult) error {
+			var ferr error
+			user, ferr = q.GetUserIdentityFields(ctx, r.UserID)
+			return ferr
+		})
 	if err != nil {
 		// Any failure returns 401 with a single generic message. The distinct
 		// sentinels are for logs only — we don't want an enumeration oracle
@@ -35,6 +44,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 			errors.Is(err, refresh.ErrExpired),
 			errors.Is(err, refresh.ErrDeviceMismatch):
 			log.Printf("Refresh rejected (%v) for device %q", err, req.DeviceIdentifier)
+		case errors.Is(err, pgx.ErrNoRows):
+			// User row missing but a refresh token existed → likely a DELETE USER
+			// race. Treat as invalid credential.
+			log.Printf("Refresh: user not found for device %q: %v", req.DeviceIdentifier, err)
 		default:
 			log.Printf("Refresh error for device %q: %v", req.DeviceIdentifier, err)
 		}
@@ -46,15 +59,6 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		log.Printf("Refresh: failed to issue access token for user %s: %v", result.UserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to issue access token"})
-		return
-	}
-
-	user, err := h.db.GetUserIdentityFields(ctx, result.UserID)
-	if err != nil {
-		// User row missing but a refresh token existed → likely a DELETE USER
-		// race. Treat as invalid credential.
-		log.Printf("Refresh: user %s not found after valid rotation: %v", result.UserID, err)
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid refresh token."})
 		return
 	}
 

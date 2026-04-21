@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -13,13 +14,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"chat-app-server/auth/apple"
 	"chat-app-server/auth/oidc"
 	"chat-app-server/db"
-
-	"crypto/ecdsa"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -49,14 +50,20 @@ type appleStub struct {
 	srv           *httptest.Server
 	exchangeCalls int
 	failExchange  bool
+	// exchanged is closed the first time /auth/token is called, letting tests
+	// synchronise with the background code-exchange goroutine before asserting
+	// on exchangeCalls or closing the DB pool.
+	exchanged chan struct{}
+	once      sync.Once
 }
 
 func newAppleStub(t *testing.T) *appleStub {
 	t.Helper()
-	s := &appleStub{}
+	s := &appleStub{exchanged: make(chan struct{})}
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/auth/token" {
 			s.exchangeCalls++
+			s.once.Do(func() { close(s.exchanged) })
 			if s.failExchange {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
@@ -70,6 +77,19 @@ func newAppleStub(t *testing.T) *appleStub {
 	}))
 	t.Cleanup(s.srv.Close)
 	return s
+}
+
+// waitExchange blocks until the background Apple code-exchange goroutine has
+// called the stub's /auth/token endpoint, or the test times out. Call this
+// before asserting on stub.exchangeCalls and before closing the DB pool so the
+// goroutine can complete its DB writes.
+func waitExchange(t *testing.T, stub *appleStub) {
+	t.Helper()
+	select {
+	case <-stub.exchanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background Apple code-exchange goroutine did not call /auth/token within 2s")
+	}
 }
 
 func newTestAppleHandler(t *testing.T, verifier *fakeVerifier, stub *appleStub) (*AuthHandler, *db.Queries, *pgxpool.Pool, func()) {
@@ -172,11 +192,13 @@ func TestAppleSignIn_FirstTime_CreatesUser(t *testing.T) {
 	full := &AppleFullName{Given: "Jane", Family: "Roe"}
 	req := makeReq(t, "dev-"+uuid.NewString(), "code-1")
 	req.FullName = full
+	req.Birthday = "1990-01-15"
 
 	code, resp := doSignIn(t, h, req)
 	if code != http.StatusOK {
 		t.Fatalf("status: got %d want 200", code)
 	}
+	waitExchange(t, stub)
 	t.Cleanup(func() { cleanupIdentity(t, q, resp.UserID) })
 
 	if resp.UserID == uuid.Nil {
@@ -210,8 +232,10 @@ func TestAppleSignIn_Idempotent_Repeat(t *testing.T) {
 	defer cleanup()
 
 	req := makeReq(t, "dev-"+uuid.NewString(), "code-1")
+	req.Birthday = "1990-01-15"
 	_, first := doSignIn(t, h, req)
 	t.Cleanup(func() { cleanupIdentity(t, q, first.UserID) })
+	waitExchange(t, stub)
 	if stub.exchangeCalls != 1 {
 		t.Fatalf("first call exchange: got %d want 1", stub.exchangeCalls)
 	}
@@ -243,6 +267,7 @@ func TestAppleSignIn_ExchangeFails_SessionStillIssued(t *testing.T) {
 	defer cleanup()
 
 	req := makeReq(t, "dev-"+uuid.NewString(), "code-expired")
+	req.Birthday = "1990-01-15"
 	code, resp := doSignIn(t, h, req)
 	if code != http.StatusOK {
 		t.Fatalf("status: got %d want 200 (exchange failure should be non-fatal)", code)
