@@ -359,6 +359,61 @@ func TestAppleSignIn_ReturningUser_NoBirthdayRequired(t *testing.T) {
 	}
 }
 
+// TestAppleSignIn_ConcurrentRace fires N goroutines with the same
+// (provider, subject) simultaneously for the first time. The ON CONFLICT path
+// in InsertAuthIdentity plus the orphan-cleanup in findOrCreateAppleUser must
+// ensure all goroutines land on the same user row (no duplicates, no 5xx).
+func TestAppleSignIn_ConcurrentRace(t *testing.T) {
+	const N = 8
+	sub := "sub-race-" + uuid.NewString()
+	verifier := &fakeVerifier{claims: &oidc.Claims{
+		Provider: "apple", Subject: sub, Email: "race@example.com", EmailVerified: true,
+	}}
+	// No appleStub needed — we don't care about the code-exchange in this test.
+	h, q, _, cleanup := newTestAppleHandler(t, verifier, nil)
+	defer cleanup()
+
+	type result struct {
+		code int
+		resp AuthResponse
+	}
+	results := make([]result, N)
+	var wg sync.WaitGroup
+	wg.Add(N)
+	ready := make(chan struct{})
+	for i := range N {
+		go func(i int) {
+			defer wg.Done()
+			<-ready
+			req := makeReq(t, "dev-"+uuid.NewString(), "")
+			req.Birthday = "1990-01-15"
+			code, resp := doSignIn(t, h, req)
+			results[i] = result{code, resp}
+		}(i)
+	}
+	close(ready)
+	wg.Wait()
+
+	// Collect the winning user_id and verify all goroutines agree on it.
+	var canonical uuid.UUID
+	for i, r := range results {
+		if r.code != http.StatusOK {
+			t.Errorf("goroutine %d: got %d want 200", i, r.code)
+			continue
+		}
+		if r.resp.UserID == uuid.Nil {
+			t.Errorf("goroutine %d: user_id is nil", i)
+			continue
+		}
+		if canonical == uuid.Nil {
+			canonical = r.resp.UserID
+			t.Cleanup(func() { cleanupIdentity(t, q, canonical) })
+		} else if r.resp.UserID != canonical {
+			t.Errorf("goroutine %d: user_id %v != canonical %v (duplicate user created)", i, r.resp.UserID, canonical)
+		}
+	}
+}
+
 // Silence unused-import warnings if the file grows over time and some helpers
 // temporarily fall out of use.
 var _ = pem.EncodeToMemory
